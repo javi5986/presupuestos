@@ -702,18 +702,7 @@ function renderQuote() {
   leyenda.style.display = $('show-leyenda').checked ? '' : 'none';
 
   // Si el presupuesto está vacío, muestra mensaje vacío con ícono
-  if (!quote.length) {
-    box.innerHTML = `
-      <div class="q-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-          <rect x="9" y="3" width="6" height="4" rx="1"/>
-          <path d="M9 12h6M9 16h4"/>
-        </svg>
-        Buscá productos a la izquierda y hacé clic para agregarlos.
-      </div>`;
-    return;
-  }
+  if (!quote.length) { box.innerHTML = ''; return; }
 
   // Calcula el total en pesos sumando los montos de cada item usando pesosOf()
   const total = quote.reduce((s, it) => s + pesosOf(it), 0);
@@ -1053,7 +1042,10 @@ function renderStockResults() {
     const partes = [modelo, alm ? alm + 'GB' : '', color, bat ? 'BAT ' + bat + '%' : '', desc].filter(Boolean).join(' · ');
     const pesoVal = rate ? Math.round(p.priceUsd * rate) : null;
     const precioStr = 'USD ' + usdFmt(p.priceUsd) + (pesoVal ? ' · ' + pesos(pesoVal) : '');
-    return `<div class=”result-row” data-cols=”${esc(JSON.stringify(p.cols))}” data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
+    return `<div class=”result-row”
+      data-s0=”${esc(modelo)}” data-s1=”${esc(alm)}” data-s2=”${esc(color)}”
+      data-s3=”${esc(bat)}” data-s4=”${esc(desc)}”
+      data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
       <span class=”rn”>${esc(partes)}<span class=”rtag”>${esc(p.sucursal)}</span></span>
       <span class=”rp”>${esc(precioStr)}</span>
     </div>`;
@@ -1105,15 +1097,16 @@ $('refresh-stock').addEventListener('click', () => fetchStock(true));
 $('stock-results').addEventListener('click', e => {
   const row = e.target.closest('.result-row');
   if (!row) return;
-  const cols = JSON.parse(row.dataset.cols);
+  const { s0, s1, s2, s3, s4, priceUsd, sucursal } = row.dataset;
+  const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
   stockQuote.push({
     uid:      uid(),
-    name:     cols.filter(Boolean).join(' - '),
-    priceUsd: Number(row.dataset.priceUsd),
-    sucursal: row.dataset.sucursal || 'Morteros',
+    name,
+    priceUsd: Number(priceUsd),
+    sucursal: sucursal || 'Morteros',
   });
   renderStockQuote();
-  toast(cols[0] + ' agregado');
+  toast((s0 || 'Artículo') + ' agregado');
 });
 $('stock-box').addEventListener('blur', e => {
   const cell = e.target.closest('.name[contenteditable]');
