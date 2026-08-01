@@ -216,7 +216,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
         <!-- Exportable section -->
         <div id="capture">
           <div class="q-header">
-            <span class="q-brand"><span class="brand-pre">Presupuesto </span>AG</span>
+            <span class="q-brand">AG TECNOLOGIA - Presupuesto</span>
             <span id="q-date" class="q-date"></span>
           </div>
           <div id="qtitle" class="q-subtitle" contenteditable="true"
@@ -261,6 +261,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       <div class="card-head">
         <h2>Presupuesto Usados</h2>
         <div class="tools">
+          <label class="toggle"><input type="checkbox" id="stock-show-usd" checked> USD</label>
           <label class="toggle"><input type="checkbox" id="stock-show-total" checked> Total</label>
           <label class="toggle"><input type="checkbox" id="stock-show-leyenda" checked> Leyenda</label>
           <button class="btn btn-ghost" id="stock-clear">Vaciar</button>
@@ -269,7 +270,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       <div class="card-body">
         <div id="stock-capture">
           <div class="q-header">
-            <span class="q-brand"><span class="brand-pre">Presupuesto </span>AG Usados</span>
+            <span class="q-brand">AG TECNOLOGIA - Presupuesto Usados</span>
             <span id="stock-q-date" class="q-date"></span>
           </div>
           <div id="stock-box"></div>
@@ -867,7 +868,7 @@ function copyText() {
   // Lee el título del presupuesto desde el elemento editable
   const title = $('qtitle').textContent.trim();
   // Construye array de líneas con encabezado y título si existe
-  const lines = title ? ['Presupuesto AG', title, ''] : ['Presupuesto AG', ''];
+  const lines = title ? ['AG TECNOLOGIA - Presupuesto', title, ''] : ['AG TECNOLOGIA - Presupuesto', ''];
   // Agrega cada item del presupuesto en formato “Nombre: $Pesos”
   quote.forEach(it => lines.push(it.name + ': ' + pesos(pesosOf(it))));
   // Calcula el total sumando montos de todos los items
@@ -1006,8 +1007,14 @@ async function fetchStock(force = false) {
     if (rows.length < 2) throw new Error('Sin datos');
     stockHeaders = rows[0].slice(0, 5).map(h => h.trim());
     stockCatalog = rows.slice(1)
-      .filter(r => r.length >= 6 && parseNum(r[5]) > 0)
-      .map(r => ({ cols: r.slice(0, 5).map(s => s.trim()), price: Math.round(parseNum(r[5])) }));
+      .map(r => {
+        const priceRaw = (r[5] || '').replace(/[^0-9.,]/g, '');
+        const priceUsd = parseNum(priceRaw);
+        const sucursalRaw = (r[6] || '').trim();
+        const sucursal = sucursalRaw ? sucursalRaw : 'Morteros';
+        return { cols: r.slice(0, 5).map(s => s.trim()), priceUsd: isNaN(priceUsd) ? 0 : priceUsd, sucursal };
+      })
+      .filter(p => p.priceUsd > 0 && p.cols.some(c => c));
     localStorage.setItem(STOCK_KEY, JSON.stringify({ ts: Date.now(), data: stockCatalog, headers: stockHeaders }));
     status.textContent = stockCatalog.length + ' articulos en stock';
     renderStockResults();
@@ -1029,19 +1036,24 @@ function renderStockResults() {
   const q   = $('stock-search').value.trim().toLowerCase();
   const box = $('stock-results');
   if (!q) { box.innerHTML = ''; return; }
-  let list = stockCatalog.filter(p => p.price > 0 && p.cols.some(c => c.toLowerCase().includes(q)));
+  let list = stockCatalog.filter(p => p.priceUsd > 0 && p.cols.some(c => c.toLowerCase().includes(q)));
   list = list.slice(0, 100);
   if (!list.length) { box.innerHTML = '<div class=”result-empty”>Sin resultados.</div>'; return; }
-  const ths = stockHeaders.map(h => `<th>${esc(h)}</th>`).join('') + '<th class=”num”>Precio</th>';
+  const ths = stockHeaders.map(h => `<th>${esc(h)}</th>`).join('') +
+    '<th class=”num”>USD</th><th class=”num”>Pesos</th><th>Sucursal</th>';
   const trs = list.map(p => {
     const tds = p.cols.map(c => `<td>${esc(c)}</td>`).join('');
-    return `<tr class=”stock-row” data-cols=”${esc(JSON.stringify(p.cols))}” data-price=”${p.price}”>${tds}<td class=”num”>${pesos(p.price)}</td></tr>`;
+    const pesoVal = Math.round(p.priceUsd * rate);
+    return `<tr class=”stock-row” data-cols=”${esc(JSON.stringify(p.cols))}” data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
+      ${tds}<td class=”num”>USD ${usdFmt(p.priceUsd)}</td><td class=”num”>${pesos(pesoVal)}</td><td>${esc(p.sucursal)}</td>
+    </tr>`;
   }).join('');
   box.innerHTML = `<div class=”stock-overflow”><table class=”stock-table”><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 function renderStockQuote() {
-  const box = $('stock-box');
+  const box      = $('stock-box');
+  const showUsd   = $('stock-show-usd').checked;
   const showTotal = $('stock-show-total').checked;
   $('stock-leyenda').style.display = $('stock-show-leyenda').checked ? '' : 'none';
   if (!stockQuote.length) {
@@ -1052,15 +1064,30 @@ function renderStockQuote() {
       </svg>Busca articulos a la izquierda y hace clic para agregarlos.</div>`;
     return;
   }
-  const total = stockQuote.reduce((s, it) => s + it.price, 0);
-  const rows  = stockQuote.map(it => `<tr>
-    <td class=”name” contenteditable data-uid=”${it.uid}”>${esc(it.name)}</td>
-    <td class=”num pesos”>${esc(pesos(it.price))}</td>
-    <td class=”num noexp”><button class=”del” data-uid=”${it.uid}” title=”Quitar”>x</button></td>
-  </tr>`).join('');
-  box.innerHTML = `<table class=”qtable”><thead><tr><th>Articulo</th><th class=”num”>Precio</th><th class=”num noexp”></th></tr></thead>
+  const totalPesos = stockQuote.reduce((s, it) => s + Math.round(it.priceUsd * rate), 0);
+  const rows = stockQuote.map(it => {
+    const pesoVal = Math.round(it.priceUsd * rate);
+    return `<tr>
+      <td class=”name” contenteditable data-uid=”${it.uid}”>${esc(it.name)}</td>
+      <td>${esc(it.sucursal)}</td>
+      ${showUsd ? `<td class=”num”>USD ${usdFmt(it.priceUsd)}</td>` : ''}
+      <td class=”num pesos”>${esc(pesos(pesoVal))}</td>
+      <td class=”num noexp”><button class=”del” data-uid=”${it.uid}” title=”Quitar”>✕</button></td>
+    </tr>`;
+  }).join('');
+  const colspan = showUsd ? 3 : 2;
+  box.innerHTML = `<table class=”qtable”>
+    <thead><tr>
+      <th>Articulo</th><th>Sucursal</th>
+      ${showUsd ? '<th class=”num”>USD</th>' : ''}
+      <th class=”num”>Pesos</th><th class=”num noexp”></th>
+    </tr></thead>
     <tbody>${rows}</tbody>
-    ${showTotal ? `<tfoot><tr><td class=”total-label”>Total</td><td class=”total-val num pesos”>${esc(pesos(total))}</td><td class=”noexp”></td></tr></tfoot>` : ''}
+    ${showTotal ? `<tfoot><tr>
+      <td class=”total-label” colspan=”${colspan}”>Total</td>
+      <td class=”total-val num pesos”>${esc(pesos(totalPesos))}</td>
+      <td class=”noexp”></td>
+    </tr></tfoot>` : ''}
   </table>`;
 }
 
@@ -1070,7 +1097,12 @@ $('stock-results').addEventListener('click', e => {
   const row = e.target.closest('.stock-row');
   if (!row) return;
   const cols = JSON.parse(row.dataset.cols);
-  stockQuote.push({ uid: uid(), name: cols.filter(Boolean).join(' - '), price: Number(row.dataset.price) });
+  stockQuote.push({
+    uid:      uid(),
+    name:     cols.filter(Boolean).join(' - '),
+    priceUsd: Number(row.dataset.priceUsd),
+    sucursal: row.dataset.sucursal || 'Morteros',
+  });
   renderStockQuote();
   toast(cols[0] + ' agregado');
 });
@@ -1087,15 +1119,23 @@ $('stock-box').addEventListener('click', e => {
   renderStockQuote();
 });
 $('stock-clear').addEventListener('click', () => { stockQuote = []; renderStockQuote(); });
+$('stock-show-usd').addEventListener('change', renderStockQuote);
 $('stock-show-total').addEventListener('change', renderStockQuote);
 $('stock-show-leyenda').addEventListener('change', renderStockQuote);
 
 $('stock-btn-text').addEventListener('click', () => {
   if (!stockQuote.length) { toast('El presupuesto esta vacio', true); return; }
-  const lines = ['Presupuesto AG Usados', ''];
-  stockQuote.forEach(it => lines.push(it.name + ': ' + pesos(it.price)));
-  if ($('stock-show-total').checked)
-    lines.push('', 'TOTAL: ' + pesos(stockQuote.reduce((s, it) => s + it.price, 0)));
+  const showUsd = $('stock-show-usd').checked;
+  const lines = ['AG TECNOLOGIA - Presupuesto Usados', ''];
+  stockQuote.forEach(it => {
+    const pesoVal = Math.round(it.priceUsd * rate);
+    const precio = showUsd ? `USD ${usdFmt(it.priceUsd)} (${pesos(pesoVal)})` : pesos(pesoVal);
+    lines.push(`${it.name} [${it.sucursal}]: ${precio}`);
+  });
+  if ($('stock-show-total').checked) {
+    const totalPesos = stockQuote.reduce((s, it) => s + Math.round(it.priceUsd * rate), 0);
+    lines.push('', 'TOTAL: ' + pesos(totalPesos));
+  }
   if ($('stock-show-leyenda').checked)
     lines.push('', '* Precios en pesos sujetos a variacion del tipo de cambio');
   navigator.clipboard.writeText(lines.join('\n'))
@@ -1136,6 +1176,7 @@ document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 loadCatalog();
 fetchRate();
+localStorage.removeItem(STOCK_KEY);
 fetchStock();
 $('refresh-cat').addEventListener('click', () => loadCatalog(true));
 document.getElementById('stock-q-date').textContent =
