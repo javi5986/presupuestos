@@ -95,15 +95,12 @@ select:focus,.input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--te
 
 /* â”€â”€â”€ Presupuesto exportable (#capture) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #capture{padding:0}
-.q-header{display:flex;align-items:center;justify-content:space-between;
-  padding-bottom:10px;border-bottom:2px solid var(--teal-d);margin-bottom:10px}
-.q-logo{height:32px;width:auto;object-fit:contain}
-.q-title-block{text-align:right}
-.q-brand{display:block;font-size:16px;font-weight:800;color:var(--teal-d)}
-.q-date{display:block;font-size:12px;color:var(--muted)}
-.q-subtitle{font-size:13px;color:var(--muted);margin-bottom:10px;min-height:18px;
+.q-header{display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:10px}
+.q-brand{font-size:15px;font-weight:800;color:var(--teal-d)}
+.q-date{font-size:12px;color:var(--muted)}
+.q-subtitle{font-size:13px;color:var(--muted);margin-bottom:10px;
   border:1px dashed transparent;border-radius:6px;padding:2px 4px;outline:none}
-.q-subtitle:empty::before{content:attr(data-placeholder);color:var(--line)}
 .q-subtitle:focus{border-color:var(--line)}
 
 /* â”€â”€â”€ Quote table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -160,11 +157,11 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     </div>
     <div class="dollar-chip">
       <div>
-        <div class="chip-label">DÃ³lar Blue</div>
+        <div class="chip-label">Dólar Blue</div>
         <div class="chip-val"><span>$</span><input id="rate" type="number" step="1" value="0"></div>
         <div id="rate-meta" class="chip-meta">Cargando...</div>
       </div>
-      <button class="btn btn-icon" id="refresh-rate" title="Actualizar dÃ³lar blue">
+      <button class="btn btn-icon" id="refresh-rate" title="Actualizar dólar blue">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
@@ -184,7 +181,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       </div>
       <div class="card-body">
         <div class="field">
-          <label for="cat-sel">CategorÃ­a</label>
+          <label for="cat-sel">Categoría</label>
           <select id="cat-sel"></select>
         </div>
         <div class="field">
@@ -201,6 +198,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
         <h2>Presupuesto</h2>
         <div class="tools">
           <label class="toggle"><input type="checkbox" id="show-usd" checked> USD</label>
+          <label class="toggle"><input type="checkbox" id="show-total" checked> Total</label>
           <label class="toggle"><input type="checkbox" id="show-leyenda" checked> Leyenda</label>
           <button class="btn btn-ghost" id="clear-quote">Vaciar</button>
         </div>
@@ -209,17 +207,14 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
         <!-- Exportable section -->
         <div id="capture">
           <div class="q-header">
-            <img id="q-logo" src="" class="q-logo" alt="AG">
-            <div class="q-title-block">
-              <span class="q-brand">Presupuesto AG</span>
-              <span id="q-date" class="q-date"></span>
-            </div>
+            <span class="q-brand">Presupuesto AG</span>
+            <span id="q-date" class="q-date"></span>
           </div>
           <div id="qtitle" class="q-subtitle" contenteditable="true"
-               spellcheck="false" data-placeholder="Cliente / descripciÃ³n (opcional)"></div>
+               spellcheck="false" data-placeholder="Cliente / descripción (opcional)" style="display:none"></div>
           <div id="quote-box"></div>
           <div id="leyenda" class="leyenda">
-            * Precios en pesos sujetos a variaciÃ³n del tipo de cambio
+            * Precios en pesos sujetos a variación del tipo de cambio
           </div>
         </div>
         <!-- Export controls (no aparecen en la imagen) -->
@@ -254,7 +249,7 @@ const SHEET_CONFIGS = [
   { name: 'Reloj',       gid: 1373747312, cols: [[0,1]] },
   { name: 'Dron',        gid: 1522901007, cols: [[0,1]] },
   { name: 'Consolas',    gid: 395658420,  cols: [[0,1],[2,3]] },
-  { name: 'ComputaciÃ³n', gid: 412776917,  cols: [[0,1],[3,4]] },
+  { name: 'Computación', gid: 412776917,  cols: [[0,1],[3,4]] },
   { name: 'Otros',       gid: 2142664820, cols: [[0,1],[3,4],[6,7]] },
 ];
 
@@ -638,7 +633,8 @@ function renderQuote() {
   // Obtiene referencia al contenedor de la tabla
   const box      = $('quote-box');
   // Lee checkbox para mostrar/ocultar columna USD
-  const showUsd  = $('show-usd').checked;
+  const showUsd   = $('show-usd').checked;
+  const showTotal = $('show-total').checked;
   // Obtiene referencia a la sección de leyenda
   const leyenda  = $('leyenda');
   // Muestra/oculta leyenda según checkbox show-leyenda
@@ -684,13 +680,13 @@ function renderQuote() {
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-      <tfoot>
+      ${showTotal ? `<tfoot>
         <tr>
           <td class="total-label" colspan="${showUsd ? 2 : 1}">Total</td>
           <td class="total-val num pesos">${esc(pesos(total))}</td>
           <td class="noexp"></td>
         </tr>
-      </tfoot>
+      </tfoot>` : ''}
     </table>`;
 }
 
@@ -721,8 +717,14 @@ $('clear-quote').addEventListener('click', () => { quote = []; renderQuote(); })
 
 // Re-render al cambiar toggle USD: ejecuta renderQuote cuando cambia show-usd
 $('show-usd').addEventListener('change', renderQuote);
+// Re-render al cambiar toggle Total: ejecuta renderQuote cuando cambia show-total
+$('show-total').addEventListener('change', renderQuote);
 // Re-render al cambiar toggle Leyenda: ejecuta renderQuote cuando cambia show-leyenda
 $('show-leyenda').addEventListener('change', renderQuote);
+// Mostrar/ocultar qtitle según tenga contenido
+$('qtitle').addEventListener('input', () => {
+  $('qtitle').style.display = $('qtitle').textContent.trim() ? '' : 'none';
+});
 
 // Retorna array de nombres únicos de hojas (categorías), ordenados alfabéticamente en español
 function sheetNames() {
@@ -808,9 +810,11 @@ function copyText() {
   quote.forEach(it => lines.push(it.name + ': ' + pesos(pesosOf(it))));
   // Calcula el total sumando montos de todos los items
   const total = quote.reduce((s, it) => s + pesosOf(it), 0);
-  // Agrega separador y línea de total
-  lines.push('');
-  lines.push('TOTAL: ' + pesos(total));
+  // Agrega separador y línea de total si el toggle está activo
+  if ($('show-total').checked) {
+    lines.push('');
+    lines.push('TOTAL: ' + pesos(total));
+  }
   // Si está habilitada, agrega leyenda sobre variación de precios
   if ($('show-leyenda').checked) {
     lines.push('');
@@ -911,7 +915,6 @@ $('btn-copy-img').addEventListener('click', copyImage);
 
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
-document.getElementById('q-logo').src    = LOGO_B64;
 document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 loadCatalog(); // carga catálogo desde Google Sheets o usa BAKED si falla
