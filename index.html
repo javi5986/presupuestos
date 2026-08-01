@@ -757,8 +757,11 @@ function renderResults() {
   const box = $('results'); // contenedor donde se muestran los resultados
   const showSheet = sh === '__all'; // flag para mostrar etiqueta de categoría
 
-  // Filtra catálogo: primero por categoría, luego por texto de búsqueda
-  let list = catalog.filter(p => sh === '__all' || p.sheet === sh);
+  // Si no hay búsqueda ni categoría específica, no muestra nada
+  if (!q && sh === '__all') { box.innerHTML = ''; return; }
+
+  // Filtra catálogo: primero por precio > 0, luego por categoría y búsqueda
+  let list = catalog.filter(p => p.price > 0 && (sh === '__all' || p.sheet === sh));
   if (q) list = list.filter(p => p.name.toLowerCase().includes(q));
   // Ordena alfabéticamente en español y limita a 150 resultados
   list.sort((a, b) => a.name.localeCompare(b.name, 'es'));
