@@ -97,7 +97,8 @@ select:focus,.input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--te
 #capture{padding:0}
 .q-header{display:flex;align-items:baseline;justify-content:space-between;
   margin-bottom:10px}
-.q-brand{font-size:15px;font-weight:800;color:var(--teal-d)}
+.q-brand{font-size:15px;font-weight:800;color:#111}
+.q-brand .brand-pre{font-weight:400;color:var(--muted)}
 .q-date{font-size:12px;color:var(--muted)}
 .q-subtitle{font-size:13px;color:var(--muted);margin-bottom:10px;
   border:1px dashed transparent;border-radius:6px;padding:2px 4px;outline:none}
@@ -207,7 +208,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
         <!-- Exportable section -->
         <div id="capture">
           <div class="q-header">
-            <span class="q-brand">Presupuesto AG</span>
+            <span class="q-brand"><span class="brand-pre">Presupuesto </span>AG</span>
             <span id="q-date" class="q-date"></span>
           </div>
           <div id="qtitle" class="q-subtitle" contenteditable="true"
