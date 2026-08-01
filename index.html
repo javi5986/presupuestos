@@ -1067,11 +1067,12 @@ function renderStockQuote() {
     </tr>`;
   }).join('');
   const colspan = showUsd ? 3 : 2;
+  const thStyle = 'background:var(--teal-d);color:#fff;font-weight:700;font-size:12px;padding:10px 14px;text-align:left;text-transform:uppercase;letter-spacing:.4px';
   box.innerHTML = `<table class=”qtable”>
     <thead><tr>
-      <th>Articulo</th><th>Sucursal</th>
-      ${showUsd ? '<th class=”num”>USD</th>' : ''}
-      <th class=”num”>Pesos</th><th class=”num noexp”></th>
+      <th style=”${thStyle}”>Articulo</th><th style=”${thStyle}”>Sucursal</th>
+      ${showUsd ? `<th class=”num” style=”${thStyle};text-align:right”>USD</th>` : ''}
+      <th class=”num” style=”${thStyle};text-align:right”>Pesos</th><th class=”num noexp” style=”${thStyle}”></th>
     </tr></thead>
     <tbody>${rows}</tbody>
     ${showTotal ? `<tfoot><tr>
