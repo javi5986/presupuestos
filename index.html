@@ -1050,8 +1050,8 @@ function renderStockResults() {
 }
 
 function renderStockQuote() {
-  const box     = $('stock-box');
-  const showUsd = $('stock-show-usd').checked;
+  const box       = $('stock-box');
+  const showUsd   = $('stock-show-usd').checked;
   const showTotal = $('stock-show-total').checked;
   $('stock-leyenda').style.display = $('stock-show-leyenda').checked ? '' : 'none';
   box.innerHTML = '';
@@ -1062,51 +1062,47 @@ function renderStockQuote() {
   const table = document.createElement('table');
   table.className = 'qtable';
 
+  // Encabezados: Modelo | Almac. | Color | Bat. | Sucursal | [USD] | Pesos | del
   const thead = table.createTHead();
   const hrow  = thead.insertRow();
-  const headers = ['Articulo', 'Sucursal'];
-  if (showUsd) headers.push('USD');
-  headers.push('Pesos', '');
-  headers.forEach((text, i) => {
+  [['Modelo',''],['Almac.',''],['Color',''],['Bat.','num'],['Sucursal',''],
+   ...(showUsd ? [['USD','num']] : []),
+   ['Pesos','num'],['','num noexp']
+  ].forEach(([text, cls]) => {
     const th = document.createElement('th');
     th.textContent = text;
-    const isNum = (showUsd ? [2,3] : [2]).includes(i);
-    if (isNum) th.className = 'num';
-    if (i === headers.length - 1) th.className = 'num noexp';
+    if (cls) th.className = cls;
     hrow.appendChild(th);
   });
 
+  // Filas de datos
   const tbody = table.createTBody();
   stockQuote.forEach(it => {
     const pesoVal = Math.round(it.priceUsd * rate);
     const tr = tbody.insertRow();
 
-    const tdName = tr.insertCell();
-    tdName.className = 'name';
-    tdName.contentEditable = 'true';
-    tdName.dataset.uid = it.uid;
-    tdName.textContent = it.name;
-    tdName.addEventListener('blur', () => { it.name = tdName.textContent.trim(); });
+    const tdM = tr.insertCell(); tdM.className = 'name';
+    tdM.contentEditable = 'true'; tdM.textContent = it.modelo;
+    tdM.addEventListener('blur', () => { it.modelo = tdM.textContent.trim(); });
 
-    const tdSuc = tr.insertCell();
-    tdSuc.textContent = it.sucursal;
+    const tdA = tr.insertCell(); tdA.textContent = it.alm ? it.alm + ' GB' : '';
+    const tdC = tr.insertCell(); tdC.textContent = it.color;
+    const tdB = tr.insertCell(); tdB.className = 'num';
+    tdB.textContent = it.bat ? it.bat + '%' : '';
+
+    const tdS = tr.insertCell(); tdS.textContent = it.sucursal;
 
     if (showUsd) {
-      const tdUsd = tr.insertCell();
-      tdUsd.className = 'num';
-      tdUsd.textContent = 'USD ' + usdFmt(it.priceUsd);
+      const tdU = tr.insertCell(); tdU.className = 'num';
+      tdU.textContent = 'USD ' + usdFmt(it.priceUsd);
     }
 
-    const tdPesos = tr.insertCell();
-    tdPesos.className = 'num pesos';
-    tdPesos.textContent = pesos(pesoVal);
+    const tdP = tr.insertCell(); tdP.className = 'num pesos';
+    tdP.textContent = pesos(pesoVal);
 
-    const tdDel = tr.insertCell();
-    tdDel.className = 'num noexp';
+    const tdDel = tr.insertCell(); tdDel.className = 'num noexp';
     const btn = document.createElement('button');
-    btn.className = 'del';
-    btn.title = 'Quitar';
-    btn.textContent = '✕';
+    btn.className = 'del'; btn.title = 'Quitar'; btn.textContent = '✕';
     btn.addEventListener('click', () => {
       stockQuote = stockQuote.filter(q => q.uid !== it.uid);
       renderStockQuote();
@@ -1114,18 +1110,18 @@ function renderStockQuote() {
     tdDel.appendChild(btn);
   });
 
+  // Total
   if (showTotal) {
-    const tfoot = table.createTFoot();
-    const frow  = tfoot.insertRow();
+    const tfoot  = table.createTFoot();
+    const frow   = tfoot.insertRow();
     const tdLabel = frow.insertCell();
     tdLabel.className = 'total-label';
-    tdLabel.colSpan = showUsd ? 3 : 2;
+    tdLabel.colSpan = showUsd ? 6 : 5;
     tdLabel.textContent = 'Total';
     const tdVal = frow.insertCell();
     tdVal.className = 'total-val num pesos';
     tdVal.textContent = pesos(totalPesos);
-    const tdEmpty = frow.insertCell();
-    tdEmpty.className = 'noexp';
+    frow.insertCell().className = 'noexp';
   }
 
   box.appendChild(table);
@@ -1136,9 +1132,8 @@ $('refresh-stock').addEventListener('click', () => fetchStock(true));
 function stockAdd(i) {
   const p = stockResults[i];
   if (!p) return;
-  const [modelo, alm, color, bat, desc] = p.cols;
-  const name = [modelo, alm ? alm+'GB' : '', color, bat ? 'BAT '+bat+'%' : '', desc].filter(Boolean).join(' - ');
-  stockQuote.push({ uid: uid(), name, priceUsd: p.priceUsd, sucursal: p.sucursal });
+  const [modelo, alm, color, bat] = p.cols;
+  stockQuote.push({ uid: uid(), modelo: modelo||'', alm: alm||'', color: color||'', bat: bat||'', priceUsd: p.priceUsd, sucursal: p.sucursal });
   renderStockQuote();
   toast((modelo || 'Artículo') + ' agregado');
 }
@@ -1154,7 +1149,8 @@ $('stock-btn-text').addEventListener('click', () => {
   stockQuote.forEach(it => {
     const pesoVal = Math.round(it.priceUsd * rate);
     const precio = showUsd ? `USD ${usdFmt(it.priceUsd)} (${pesos(pesoVal)})` : pesos(pesoVal);
-    lines.push(`${it.name} [${it.sucursal}]: ${precio}`);
+    const desc = [it.modelo, it.alm ? it.alm+'GB' : '', it.color, it.bat ? it.bat+'%' : ''].filter(Boolean).join(' - ');
+    lines.push(`${desc} [${it.sucursal}]: ${precio}`);
   });
   if ($('stock-show-total').checked) {
     const totalPesos = stockQuote.reduce((s, it) => s + Math.round(it.priceUsd * rate), 0);
