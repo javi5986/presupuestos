@@ -1050,6 +1050,15 @@ function renderStockResults() {
       <span class=”rp”>${esc(precioStr)}</span>
     </div>`;
   }).join('');
+  box.querySelectorAll('.result-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const { s0, s1, s2, s3, s4, priceUsd, sucursal } = row.dataset;
+      const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
+      stockQuote.push({ uid: uid(), name, priceUsd: Number(priceUsd), sucursal: sucursal || 'Morteros' });
+      renderStockQuote();
+      toast((s0 || 'Artículo') + ' agregado');
+    });
+  });
 }
 
 function renderStockQuote() {
@@ -1057,14 +1066,7 @@ function renderStockQuote() {
   const showUsd   = $('stock-show-usd').checked;
   const showTotal = $('stock-show-total').checked;
   $('stock-leyenda').style.display = $('stock-show-leyenda').checked ? '' : 'none';
-  if (!stockQuote.length) {
-    box.innerHTML = `<div class=”q-empty”>
-      <svg viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.5”>
-        <path d=”M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2”/>
-        <rect x=”9” y=”3” width=”6” height=”4” rx=”1”/><path d=”M9 12h6M9 16h4”/>
-      </svg>Busca articulos a la izquierda y hace clic para agregarlos.</div>`;
-    return;
-  }
+  if (!stockQuote.length) { box.innerHTML = ''; return; }
   const totalPesos = stockQuote.reduce((s, it) => s + Math.round(it.priceUsd * rate), 0);
   const rows = stockQuote.map(it => {
     const pesoVal = Math.round(it.priceUsd * rate);
@@ -1094,20 +1096,6 @@ function renderStockQuote() {
 
 $('stock-search').addEventListener('input', renderStockResults);
 $('refresh-stock').addEventListener('click', () => fetchStock(true));
-$('stock-results').addEventListener('click', e => {
-  const row = e.target.closest('.result-row');
-  if (!row) return;
-  const { s0, s1, s2, s3, s4, priceUsd, sucursal } = row.dataset;
-  const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
-  stockQuote.push({
-    uid:      uid(),
-    name,
-    priceUsd: Number(priceUsd),
-    sucursal: sucursal || 'Morteros',
-  });
-  renderStockQuote();
-  toast((s0 || 'Artículo') + ' agregado');
-});
 $('stock-box').addEventListener('blur', e => {
   const cell = e.target.closest('.name[contenteditable]');
   if (!cell) return;
