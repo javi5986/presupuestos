@@ -299,6 +299,280 @@ function usdCell(item) { // retorna la conversión a USD del precio, o '—' si 
   return rate ? '≈ USD ' + usdFmt(Math.round(item.price / rate)) : '—'; // sino divide por rate o muestra '—'
 }
 
+// ─── CSV Parser ───────────────────────────────────────────────────────────────────────────────────────────────
+function parseCSVLine(line) { // parsea una línea CSV respetando comillas dobles
+  const cells = []; // array donde guardaremos las celdas parseadas
+  let cur = '', inQ = false; // current cell value y flag de dentro-de-comillas
+  for (let i = 0; i < line.length; i++) { // itera carácter por carácter
+    const c = line[i]; // carácter actual
+    if (inQ) { // si estamos dentro de comillas
+      if (c === '"' && line[i+1] === '"') { cur += '"'; i++; } // si hay comillas dobles, agrega una comilla (escape)
+      else if (c === '"') inQ = false; // si hay comilla simple, fin de comillas
+      else cur += c; // sino agrega el carácter
+    } else { // si estamos fuera de comillas
+      if (c === '"') inQ = true; // si hay comilla, entramos en comillas
+      else if (c === ',') { cells.push(cur); cur = ''; } // si hay coma, separamos y reseteo
+      else cur += c; // sino agrega el carácter
+    }
+  }
+  cells.push(cur); // agrega la última celda
+  return cells; // retorna array de celdas
+}
+
+function parseNum(s) { // parsea strings a números, maneja miles y decimales
+  if (!s) return NaN; // si está vacío retorna NaN
+  s = String(s).trim().replace(/[$\s]/g, ''); // remueve espacios y $
+  if (!s || s === '-') return NaN; // si quedó vacío o es solo guion, retorna NaN
+  // "6.000" (miles) vs "3.5" (decimal): si hay punto y los decimales son 3 dígitos → miles
+  if (/\.\d{3}$/.test(s)) s = s.replace(/\./g, ''); // si termina con .NNN es miles, remueve todos los puntos
+  s = s.replace(',', '.'); // reemplaza comas por puntos para parseFloat
+  return parseFloat(s); // retorna número parseado
+}
+
+function parseSheet(csvText, config) { // parsea un CSV según columnas especificadas, agrupa por marca
+  const products = []; // array de productos parseados
+  const rows = csvText.split(/\r?\n/).map(parseCSVLine); // divide en líneas y parsea cada una
+  const brand = new Array(config.cols.length).fill(''); // array para guardar marca/prefijo por columna
+
+  for (const row of rows) { // itera cada fila
+    for (let g = 0; g < config.cols.length; g++) { // itera cada columna especificada
+      const [nc, pc] = config.cols[g]; // desempaqueta índices de nombre y precio
+      const rawName  = (row[nc] || '').trim(); // obtiene nombre raw de celda
+      const rawPrice = (row[pc] || '').trim(); // obtiene precio raw de celda
+
+      if (!rawName) { brand[g] = ''; continue; } // si no hay nombre, limpia marca y siguiente
+      if (HEADERS.has(rawName.toUpperCase())) continue; // si es header, ignora
+
+      const price = parseNum(rawPrice); // parsea el precio
+
+      if (!isNaN(price) && price > 0) { // si tiene precio válido > 0
+        const fullName = brand[g] ? brand[g] + ' ' + rawName : rawName; // concatena marca con nombre
+        const cur = price >= 2000 ? 'A' : 'U'; // si precio >= 2000 es pesos ARS, sino USD
+        products.push({ name: fullName, price, cur, sheet: config.name }); // agrega producto
+      } else if (!rawPrice || rawPrice === '-') { // si no tiene precio o es '-'
+        brand[g] = rawName; // marca/prefijo para próximos productos de esta columna
+      }
+    }
+  }
+  return products; // retorna array de productos
+}
+
+// ─── Catalog fetch ────────────────────────────────────────────────────────────────────────────────────────────
+async function fetchSheet(config) { // obtiene CSV de una hoja Google Sheets publicada
+  const url = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_ID}/pub?output=csv&gid=${config.gid}`; // URL de export CSV
+  const res = await fetch(url, { cache: 'no-store' }); // hace fetch sin cachear
+  if (!res.ok) throw new Error('HTTP ' + res.status); // si falla HTTP lanza error
+  const text = await res.text(); // obtiene texto CSV
+  return parseSheet(text, config); // parsea y retorna productos
+}
+
+async function loadCatalog(force = false) { // carga catálogo desde Google Sheets o cache local
+  const status = $('cat-status'); // elemento donde mostrar estado
+
+  // Intentar usar caché
+  if (!force) { // si no forzamos actualización
+    try {
+      const raw = localStorage.getItem(CACHE_KEY); // obtiene cache serializado
+      if (raw) { // si existe
+        const cached = JSON.parse(raw); // deserialiaza
+        if (Date.now() - cached.ts < CACHE_TTL) { // si no expiró (< 10min)
+          catalog = cached.data; // usa datos del cache
+          status.textContent = '✓ Catálogo actualizado (caché)'; // muestra estado
+          renderResults(); // renderiza resultados con el cache
+          return; // sale temprano
+        }
+      }
+    } catch (_) {} // si algo falla en cache, continúa normalmente
+  }
+
+  status.textContent = '⏳ Actualizando catálogo...'; // muestra estado de carga
+  const errors = []; // array para guardar nombres de hojas que fallaron
+  const results = await Promise.allSettled( // ejecuta fetch paralelo de todas las hojas
+    SHEET_CONFIGS.map(cfg => fetchSheet(cfg)) // mapea cada config a una promesa de fetch
+  );
+
+  catalog = []; // resetea catálogo
+  results.forEach((r, i) => { // itera resultados de allSettled
+    if (r.status === 'fulfilled') { // si fue exitoso
+      catalog.push(...r.value); // agrega productos a catálogo
+    } else { // si falló
+      errors.push(SHEET_CONFIGS[i].name); // guarda nombre de la hoja
+    }
+  });
+
+  if (catalog.length === 0) { // si no hay productos
+    // Fallback a datos BAKED
+    catalog = BAKED.map(p => ({ ...p })); // usa datos de respaldo
+    status.textContent = '⚠ Sin conexión — usando datos guardados'; // muestra estado
+    toast('No se pudo conectar. Usando datos del último build.', true); // notificación de error
+  } else { // si tenemos productos
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: catalog })); // guarda en cache
+    } catch (_) {} // si falla localStorage (quota, etc), ignora
+
+    if (errors.length) { // si algunos fetches fallaron
+      status.textContent = `⚠ Error en: ${errors.join(', ')}`; // muestra hojas que fallaron
+      toast(`No se pudo cargar: ${errors.join(', ')}`, true); // notificación
+    } else { // si todo fue bien
+      status.textContent = `✓ ${catalog.length} productos — actualizado ahora`; // muestra cantidad de productos
+    }
+  }
+
+  renderResults(); // renderiza resultados con nuevo catálogo
+}
+
+// ─── Catálogo de respaldo (BAKED) ─────────────────────────────────────────────────────────────────────────────
+// Extraído de presupuestos.html (C:\Users\JOM\Desktop\presupuestos.html), sin hoja Vape.
+// Para regenerar: abrir presupuestos.html, copiar el array BAKED de la línea ~204,
+// filtrar con: BAKED.filter(p => p.sheet !== 'Vape')
+const BAKED = [
+  {"name":"ADAPTADOR UNIVERSAL CHICO","price":6000,"cur":"A","sheet":"Accesorios"},
+  {"name":"ADAPTADOR UNIVERSAL GRANDE","price":12000,"cur":"A","sheet":"Accesorios"},
+  {"name":"APPLE MAGSAFE","price":56,"cur":"U","sheet":"Accesorios"},
+  {"name":"CABLE APPLE GENERICO C-L","price":10000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE APPLE ORIGINAL 1m c-l","price":40000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE KIKIGO","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE MIXOR A - C","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE SOUL A - L","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE SOUL A -C","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE SOUL C - C","price":8000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE SOUL C-L","price":8000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE SUPER CHARGE FLASH","price":5000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLE USB A - MICRO USB","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CABLES APPLE GENERICO C-C","price":8000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR APPLE CERTIFICADO","price":25,"cur":"U","sheet":"Accesorios"},
+  {"name":"CARGADOR APPLE ORIGINAL","price":50,"cur":"U","sheet":"Accesorios"},
+  {"name":"CARGADOR AUTO 25W","price":16000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR AUTO 45W","price":18000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR MIXOR","price":10000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR RAPIDO SOUL 20W SIN CABLE","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR RAPIDO SOUL 20W+CABLE","price":18000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR RAPIDO SOUL 35W SIN CABLE","price":25000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR RAPIDO SOUL 35W+CABLE","price":30000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR RAPIDO SOUL 65W+CABLE","price":45000,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADOR SAMSUNG ORIGINAL","price":40,"cur":"U","sheet":"Accesorios"},
+  {"name":"CARGADORES MKT","price":16500,"cur":"A","sheet":"Accesorios"},
+  {"name":"CARGADORES PRO21","price":12000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA DISEÑO AGARRE","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA DISEÑO CHARMS","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA KIKIGO","price":8000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA MAGSAFE","price":10000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA MAGSAFE COLOR","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA MAGSAFE METALIZADA","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA MAGSAFE PERSONALIZADA","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA SILICON CASE","price":10000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA SOPORTE GIRATORIO","price":17000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDA SPACE","price":12000,"cur":"A","sheet":"Accesorios"},
+  {"name":"FUNDAS TRANSPARENTES","price":6000,"cur":"A","sheet":"Accesorios"},
+  {"name":"PROTECTOR CAMARA","price":6000,"cur":"A","sheet":"Accesorios"},
+  {"name":"PROTECTOR CAMARA GLITTER","price":7000,"cur":"A","sheet":"Accesorios"},
+  {"name":"PROTECTOR CARGADOR Y CABLE","price":12000,"cur":"A","sheet":"Accesorios"},
+  {"name":"SOUL CARGA INALAMBRICA 15W","price":50000,"cur":"A","sheet":"Accesorios"},
+  {"name":"SOUL SOP Q50","price":15000,"cur":"A","sheet":"Accesorios"},
+  {"name":"SOUL UNIVERSAL IMANTADO","price":12000,"cur":"A","sheet":"Accesorios"},
+  {"name":"TEMPLADOS","price":5000,"cur":"A","sheet":"Accesorios"},
+  {"name":"XIAOMI 10.000mAh","price":48,"cur":"U","sheet":"Accesorios"},
+  {"name":"XIAOMI 20.000mAh","price":60,"cur":"U","sheet":"Accesorios"},
+  {"name":"Apple AIRPODS PRO 2 AAA (REPLICA)","price":40,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl ENDURANCE PEAK 4","price":120,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl QUANTUM 350","price":100,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl TUNE 770NC","price":105,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl TUNE FLEX","price":95,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl TUNE FLEX 2","price":95,"cur":"U","sheet":"Auriculares"},
+  {"name":"Jbl WAVE BUDS 2","price":70,"cur":"U","sheet":"Auriculares"},
+  {"name":"SOUL TWS1400","price":40,"cur":"U","sheet":"Auriculares"},
+  {"name":"SOUL TWS200 CERO","price":20,"cur":"U","sheet":"Auriculares"},
+  {"name":"Xiaomi BUDS 5","price":68,"cur":"U","sheet":"Auriculares"},
+  {"name":"Xiaomi BUDS 5 PRO","price":90,"cur":"U","sheet":"Auriculares"},
+  {"name":"Motorola MOTO EDGE 60 8/256GB","price":350,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO EDGE 60 FUSION 8/256GB","price":320,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO EDGE 60 PRO 12/512GB","price":550,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO EDGE50 12/512GB","price":360,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO EDGE50 FUSION 8/256GB","price":338,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G15 POWER 8/256GB","price":230,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G24 8/128GB","price":229,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G24 POWER 8/256GB","price":231,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G54 8/256GB","price":260,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G56 12/256GB","price":280,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G56 8/256GB","price":260,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G85 12/256GB","price":330,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G85 8/256GB","price":290,"cur":"U","sheet":"Celulares"},
+  {"name":"Motorola MOTO G86 8/256GB","price":305,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A17 8/256GB","price":280,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A26 8/256GB 5G","price":330,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A36 8/256GB 5G","price":385,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A37 6/128GB 5G","price":440,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A37 8/256GB 5G","price":480,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A56 12/256GB","price":500,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A56 8/256GB","price":460,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A57 12/256GB 5G","price":570,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A57 12/512GB 5G","price":740,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A57 8/128GB 5G","price":520,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung A57 8/256GB 5G","price":560,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung M55 8/256GB","price":320,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S25 12/256 GB","price":780,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S25 ULTRA 12/256 GB","price":1050,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S25+ 12/256 GB","price":910,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S26 12/256GB 5G","price":860,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S26 ULTRA 12/256GB 5G","price":1330,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S26 ULTRA 12/512GB 5G","price":1390,"cur":"U","sheet":"Celulares"},
+  {"name":"Samsung S26+ 12/256GB 5G","price":1100,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi 15 128GB","price":780,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi 16 128GB","price":880,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi 16 256GB","price":1000,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi 17 256GB","price":1060,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi NOTE 14 8/256GB","price":270,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi NOTE 14 PRO 8/256GB","price":330,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi NOTE 15 8/256GB","price":280,"cur":"U","sheet":"Celulares"},
+  {"name":"Xiaomi REDMI 14C 8/256GB","price":190,"cur":"U","sheet":"Celulares"},
+  {"name":"MACBOOK AIR M2 13.6 8GB RAM 256GB SSD","price":1050,"cur":"U","sheet":"Computación"},
+  {"name":"DELL 3000-3250 INTEL I5-1235U 8/512GB 15.6 FHD","price":610,"cur":"U","sheet":"Computación"},
+  {"name":"NOTEBOOK DELL INSPIRON 15 3530 I5 8/512 15.6 FHD","price":630,"cur":"U","sheet":"Computación"},
+  {"name":"IPAD A16 128GB","price":520,"cur":"U","sheet":"Computación"},
+  {"name":"REDMI PAD 2 8/256GB","price":310,"cur":"U","sheet":"Computación"},
+  {"name":"Redragon M690","price":55,"cur":"U","sheet":"Computación"},
+  {"name":"Redragon M808","price":72,"cur":"U","sheet":"Computación"},
+  {"name":"Sony PS5 DIGITAL 825GB","price":740,"cur":"U","sheet":"Consolas"},
+  {"name":"Sony PS5 LECTORA 1TB","price":830,"cur":"U","sheet":"Consolas"},
+  {"name":"SONY CONTROL PS5","price":100,"cur":"U","sheet":"Consolas"},
+  {"name":"JOYSTICK SOUL P-600","price":65,"cur":"U","sheet":"Consolas"},
+  {"name":"Krab BASE CARGADOR PARA PS5","price":85,"cur":"U","sheet":"Consolas"},
+  {"name":"DRONE DJI NEO COMBO","price":710,"cur":"U","sheet":"Dron"},
+  {"name":"AIRTAG C/U","price":35,"cur":"U","sheet":"Otros"},
+  {"name":"Amazon ECHO DOT KIDS EDITION 5 GEN","price":80,"cur":"U","sheet":"Otros"},
+  {"name":"Amazon ECHO POP ALEXA 1ST GEN","price":65,"cur":"U","sheet":"Otros"},
+  {"name":"Amazon ECHO SHOW 8 3A GENERACION","price":190,"cur":"U","sheet":"Otros"},
+  {"name":"Sandisk 128GB","price":20,"cur":"U","sheet":"Otros"},
+  {"name":"Sandisk 32GB","price":12,"cur":"U","sheet":"Otros"},
+  {"name":"Sandisk 64GB","price":16,"cur":"U","sheet":"Otros"},
+  {"name":"XIAOMI 4 LITE","price":530,"cur":"U","sheet":"Otros"},
+  {"name":"Xiaomi MI HOME C300","price":60,"cur":"U","sheet":"Otros"},
+  {"name":"Xiaomi MI HOME EXTERIOR AW300","price":70,"cur":"U","sheet":"Otros"},
+  {"name":"Xiaomi MI HOME EXTERIOR CW400","price":75,"cur":"U","sheet":"Otros"},
+  {"name":"Xiaomi VACUUM S40C","price":280,"cur":"U","sheet":"Otros"},
+  {"name":"Jbl BOOMBOX 3","price":450,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl CHARGE 5","price":190,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl FLIP 6","price":130,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl FLIP 7","price":145,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl GO 4","price":60,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl PARTYBOX 120","price":470,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl PARTYBOX 520","price":800,"cur":"U","sheet":"Parlantes"},
+  {"name":"Jbl PARTYBOXENCORE ESSENTIAL 2","price":360,"cur":"U","sheet":"Parlantes"},
+  {"name":"Samsung HW-C400 2.0","price":240,"cur":"U","sheet":"Parlantes"},
+  {"name":"Samsung HW-Q600C 3.1.2","price":625,"cur":"U","sheet":"Parlantes"},
+  {"name":"Xiaomi MDZ 37","price":50,"cur":"U","sheet":"Parlantes"},
+  {"name":"Xiaomi MDZ 38","price":80,"cur":"U","sheet":"Parlantes"},
+  {"name":"APPLE WATCH SERIE 10 46MM","price":440,"cur":"U","sheet":"Reloj"},
+  {"name":"RELOJ XIAOMI BAND 9 PRO","price":100,"cur":"U","sheet":"Reloj"},
+  {"name":"Samsung GALAXY FIT3","price":95,"cur":"U","sheet":"Reloj"},
+  {"name":"Soul EVO 400","price":40,"cur":"U","sheet":"Reloj"},
+  {"name":"Soul EVO 700","price":53,"cur":"U","sheet":"Reloj"},
+  {"name":"Soul EVO 800","price":56,"cur":"U","sheet":"Reloj"},
+  {"name":"Xiaomi WATCH 5 ACTIVE","price":60,"cur":"U","sheet":"Reloj"},
+  {"name":"Xiaomi WATCH 5 LITE","price":70,"cur":"U","sheet":"Reloj"},
+  {"name":"Xiaomi WATCH S4","price":175,"cur":"U","sheet":"Reloj"},
+];
+
 // ─── Dólar Blue ───────────────────────────────────────────────────────────────────────────────────────────────
 async function fetchRate() { // obtiene la cotización del dólar blue de la API
   const meta = $('rate-meta'); // elemento donde mostramos el estado/resultado de la consulta
@@ -343,13 +617,16 @@ $('refresh-rate').addEventListener('click', fetchRate); // al hacer click en bot
 // stub hasta Task 5
 function renderQuote() {}
 
+// stub hasta Task 4
+function renderResults() {}
 
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
 document.getElementById('q-logo').src    = LOGO_B64;
 document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-fetchRate();
+loadCatalog(); // carga catálogo desde Google Sheets o usa BAKED si falla
+fetchRate(); // obtiene cotización del dólar blue
 </script>
 </body>
 </html>
