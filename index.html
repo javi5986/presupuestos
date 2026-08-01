@@ -134,6 +134,14 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
 /* â”€â”€â”€ Export bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .export-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;
   padding-top:14px;border-top:1px solid var(--line)}
+.stock-overflow{overflow-x:auto;overflow-y:auto;max-height:420px}
+.stock-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+.stock-table thead th{background:var(--teal-l);color:var(--teal-d);padding:5px 8px;
+  text-align:left;font-size:11px;position:sticky;top:0;z-index:1}
+.stock-table tbody tr{cursor:pointer;transition:.1s}
+.stock-table tbody tr:hover{background:var(--teal-l)}
+.stock-table td{padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px}
+.stock-table td.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* â”€â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
@@ -223,6 +231,56 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
           <button class="btn" id="btn-text">Copiar texto</button>
           <button class="btn" id="btn-copy-img">Copiar imagen</button>
           <button class="btn btn-primary" id="btn-png">Descargar PNG</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Stock Usados -->
+  <div class="grid" style="margin-top:18px">
+
+    <!-- LEFT: Stock search -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Stock Usados</h2>
+        <button class="btn" id="refresh-stock">⟳ Actualizar</button>
+      </div>
+      <div class="card-body">
+        <p id="stock-status" class="cat-status">No cargado</p>
+        <div class="field">
+          <label for="stock-search">Buscar</label>
+          <input class="input" id="stock-search" type="text" placeholder="Marca, modelo..." autocomplete="off">
+        </div>
+        <div id="stock-results"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stock quote -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Presupuesto Usados</h2>
+        <div class="tools">
+          <label class="toggle"><input type="checkbox" id="stock-show-total" checked> Total</label>
+          <label class="toggle"><input type="checkbox" id="stock-show-leyenda" checked> Leyenda</label>
+          <button class="btn btn-ghost" id="stock-clear">Vaciar</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="stock-capture">
+          <div class="q-header">
+            <span class="q-brand"><span class="brand-pre">Presupuesto </span>AG Usados</span>
+            <span id="stock-q-date" class="q-date"></span>
+          </div>
+          <div id="stock-box"></div>
+          <div id="stock-leyenda" class="leyenda">
+            * Precios en pesos sujetos a variación del tipo de cambio
+          </div>
+        </div>
+        <div class="export-bar">
+          <button class="btn" id="stock-btn-text">Copiar texto</button>
+          <button class="btn" id="stock-btn-copy-img">Copiar imagen</button>
+          <button class="btn btn-primary" id="stock-btn-png">Descargar PNG</button>
         </div>
       </div>
     </div>
@@ -916,14 +974,172 @@ $('btn-png').addEventListener('click', downloadPNG);
 // Evento para copiar presupuesto como imagen al portapapeles
 $('btn-copy-img').addEventListener('click', copyImage);
 
+// ─── Stock Usados ─────────────────────────────────────────────────────────────
+const STOCK_GID  = 811789166;
+const STOCK_KEY  = 'presup_stock_v1';
+let stockCatalog = [];
+let stockHeaders = [];
+let stockQuote   = [];
 
-// â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function fetchStock(force = false) {
+  const status = $('stock-status');
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(STOCK_KEY);
+      if (raw) {
+        const { ts, data, headers } = JSON.parse(raw);
+        if (Date.now() - ts < CACHE_TTL) {
+          stockCatalog = data; stockHeaders = headers;
+          status.textContent = stockCatalog.length + ' articulos (cache)';
+          renderStockResults(); return;
+        }
+      }
+    } catch(_) {}
+  }
+  status.textContent = 'Actualizando stock...';
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_ID}/pub?output=csv&gid=${STOCK_GID}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const rows = text.split(/\r?\n/).map(parseCSVLine);
+    if (rows.length < 2) throw new Error('Sin datos');
+    stockHeaders = rows[0].slice(0, 5).map(h => h.trim());
+    stockCatalog = rows.slice(1)
+      .filter(r => r.length >= 6 && parseNum(r[5]) > 0)
+      .map(r => ({ cols: r.slice(0, 5).map(s => s.trim()), price: Math.round(parseNum(r[5])) }));
+    localStorage.setItem(STOCK_KEY, JSON.stringify({ ts: Date.now(), data: stockCatalog, headers: stockHeaders }));
+    status.textContent = stockCatalog.length + ' articulos en stock';
+    renderStockResults();
+  } catch(e) {
+    try {
+      const raw = localStorage.getItem(STOCK_KEY);
+      if (raw) {
+        const { data, headers } = JSON.parse(raw);
+        stockCatalog = data; stockHeaders = headers;
+        status.textContent = 'Sin conexion - usando cache';
+        renderStockResults();
+      } else { status.textContent = 'No se pudo cargar el stock'; }
+    } catch(_) { status.textContent = 'Error al cargar'; }
+    toast('No se pudo actualizar el stock de usados', true);
+  }
+}
+
+function renderStockResults() {
+  const q   = $('stock-search').value.trim().toLowerCase();
+  const box = $('stock-results');
+  if (!q) { box.innerHTML = ''; return; }
+  let list = stockCatalog.filter(p => p.price > 0 && p.cols.some(c => c.toLowerCase().includes(q)));
+  list = list.slice(0, 100);
+  if (!list.length) { box.innerHTML = '<div class=”result-empty”>Sin resultados.</div>'; return; }
+  const ths = stockHeaders.map(h => `<th>${esc(h)}</th>`).join('') + '<th class=”num”>Precio</th>';
+  const trs = list.map(p => {
+    const tds = p.cols.map(c => `<td>${esc(c)}</td>`).join('');
+    return `<tr class=”stock-row” data-cols=”${esc(JSON.stringify(p.cols))}” data-price=”${p.price}”>${tds}<td class=”num”>${pesos(p.price)}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div class=”stock-overflow”><table class=”stock-table”><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
+}
+
+function renderStockQuote() {
+  const box = $('stock-box');
+  const showTotal = $('stock-show-total').checked;
+  $('stock-leyenda').style.display = $('stock-show-leyenda').checked ? '' : 'none';
+  if (!stockQuote.length) {
+    box.innerHTML = `<div class=”q-empty”>
+      <svg viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.5”>
+        <path d=”M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2”/>
+        <rect x=”9” y=”3” width=”6” height=”4” rx=”1”/><path d=”M9 12h6M9 16h4”/>
+      </svg>Busca articulos a la izquierda y hace clic para agregarlos.</div>`;
+    return;
+  }
+  const total = stockQuote.reduce((s, it) => s + it.price, 0);
+  const rows  = stockQuote.map(it => `<tr>
+    <td class=”name” contenteditable data-uid=”${it.uid}”>${esc(it.name)}</td>
+    <td class=”num pesos”>${esc(pesos(it.price))}</td>
+    <td class=”num noexp”><button class=”del” data-uid=”${it.uid}” title=”Quitar”>x</button></td>
+  </tr>`).join('');
+  box.innerHTML = `<table class=”qtable”><thead><tr><th>Articulo</th><th class=”num”>Precio</th><th class=”num noexp”></th></tr></thead>
+    <tbody>${rows}</tbody>
+    ${showTotal ? `<tfoot><tr><td class=”total-label”>Total</td><td class=”total-val num pesos”>${esc(pesos(total))}</td><td class=”noexp”></td></tr></tfoot>` : ''}
+  </table>`;
+}
+
+$('stock-search').addEventListener('input', renderStockResults);
+$('refresh-stock').addEventListener('click', () => fetchStock(true));
+$('stock-results').addEventListener('click', e => {
+  const row = e.target.closest('.stock-row');
+  if (!row) return;
+  const cols = JSON.parse(row.dataset.cols);
+  stockQuote.push({ uid: uid(), name: cols.filter(Boolean).join(' - '), price: Number(row.dataset.price) });
+  renderStockQuote();
+  toast(cols[0] + ' agregado');
+});
+$('stock-box').addEventListener('blur', e => {
+  const cell = e.target.closest('.name[contenteditable]');
+  if (!cell) return;
+  const item = stockQuote.find(q => q.uid === cell.dataset.uid);
+  if (item) item.name = cell.textContent.trim();
+}, true);
+$('stock-box').addEventListener('click', e => {
+  const btn = e.target.closest('.del');
+  if (!btn) return;
+  stockQuote = stockQuote.filter(q => q.uid !== btn.dataset.uid);
+  renderStockQuote();
+});
+$('stock-clear').addEventListener('click', () => { stockQuote = []; renderStockQuote(); });
+$('stock-show-total').addEventListener('change', renderStockQuote);
+$('stock-show-leyenda').addEventListener('change', renderStockQuote);
+
+$('stock-btn-text').addEventListener('click', () => {
+  if (!stockQuote.length) { toast('El presupuesto esta vacio', true); return; }
+  const lines = ['Presupuesto AG Usados', ''];
+  stockQuote.forEach(it => lines.push(it.name + ': ' + pesos(it.price)));
+  if ($('stock-show-total').checked)
+    lines.push('', 'TOTAL: ' + pesos(stockQuote.reduce((s, it) => s + it.price, 0)));
+  if ($('stock-show-leyenda').checked)
+    lines.push('', '* Precios en pesos sujetos a variacion del tipo de cambio');
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => toast('Texto copiado')).catch(() => toast('No se pudo copiar', true));
+});
+
+async function makeStockCanvas() {
+  if (!stockQuote.length) { toast('El presupuesto esta vacio', true); return null; }
+  if (typeof html2canvas === 'undefined') { toast('Cargando modulo, intenta de nuevo', true); return null; }
+  const wrap = $('stock-capture').cloneNode(true);
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:24px;border-radius:16px;min-width:520px;width:auto;font-family:-apple-system,BlinkMacSystemFont,”Segoe UI”,Roboto,Helvetica,Arial,sans-serif';
+  wrap.querySelectorAll('.noexp').forEach(el => el.remove());
+  wrap.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+  document.body.appendChild(wrap);
+  try {
+    return await html2canvas(wrap, { scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true });
+  } finally { wrap.remove(); }
+}
+
+$('stock-btn-png').addEventListener('click', async () => {
+  const canvas = await makeStockCanvas(); if (!canvas) return;
+  const a = document.createElement('a');
+  a.download = 'stock_usados_' + new Date().toISOString().slice(0,10) + '.png';
+  a.href = canvas.toDataURL('image/png'); a.click(); toast('Imagen descargada');
+});
+$('stock-btn-copy-img').addEventListener('click', async () => {
+  const canvas = await makeStockCanvas(); if (!canvas) return;
+  try {
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    toast('Imagen copiada al portapapeles');
+  } catch(e) { toast('Tu navegador no permite copiar imagen. Usa Descargar.', true); }
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
 document.getElementById('head-logo').src = LOGO_B64;
 document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-loadCatalog(); // carga catálogo desde Google Sheets o usa BAKED si falla
-fetchRate(); // obtiene cotización del dólar blue
-$('refresh-cat').addEventListener('click', () => loadCatalog(true)); // actualiza catálogo cuando usuario hace click en botón
+loadCatalog();
+fetchRate();
+fetchStock();
+$('refresh-cat').addEventListener('click', () => loadCatalog(true));
+document.getElementById('stock-q-date').textContent =
+  new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 </script>
 </body>
 </html>
