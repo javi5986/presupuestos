@@ -1050,56 +1050,89 @@ function renderStockResults() {
 }
 
 function renderStockQuote() {
-  const box      = $('stock-box');
-  const showUsd   = $('stock-show-usd').checked;
+  const box     = $('stock-box');
+  const showUsd = $('stock-show-usd').checked;
   const showTotal = $('stock-show-total').checked;
   $('stock-leyenda').style.display = $('stock-show-leyenda').checked ? '' : 'none';
-  if (!stockQuote.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  if (!stockQuote.length) return;
+
   const totalPesos = stockQuote.reduce((s, it) => s + Math.round(it.priceUsd * rate), 0);
-  const rows = stockQuote.map(it => {
+
+  const table = document.createElement('table');
+  table.className = 'qtable';
+
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  const headers = ['Articulo', 'Sucursal'];
+  if (showUsd) headers.push('USD');
+  headers.push('Pesos', '');
+  headers.forEach((text, i) => {
+    const th = document.createElement('th');
+    th.textContent = text;
+    const isNum = (showUsd ? [2,3] : [2]).includes(i);
+    if (isNum) th.className = 'num';
+    if (i === headers.length - 1) th.className = 'num noexp';
+    hrow.appendChild(th);
+  });
+
+  const tbody = table.createTBody();
+  stockQuote.forEach(it => {
     const pesoVal = Math.round(it.priceUsd * rate);
-    return `<tr>
-      <td class=”name” contenteditable data-uid=”${it.uid}”>${esc(it.name)}</td>
-      <td>${esc(it.sucursal)}</td>
-      ${showUsd ? `<td class=”num”>USD ${usdFmt(it.priceUsd)}</td>` : ''}
-      <td class=”num pesos”>${esc(pesos(pesoVal))}</td>
-      <td class=”num noexp”><button class=”del” data-uid=”${it.uid}” title=”Quitar”>✕</button></td>
-    </tr>`;
-  }).join('');
-  const colspan = showUsd ? 3 : 2;
-  box.innerHTML = `<table class=”qtable”>
-      <thead>
-        <tr>
-          <th>Articulo</th>
-          <th>Sucursal</th>
-          ${showUsd ? '<th class=”num”>USD</th>' : ''}
-          <th class=”num”>Pesos</th>
-          <th class=”num noexp”></th>
-        </tr>
-      </thead>
-    <tbody>${rows}</tbody>
-    ${showTotal ? `<tfoot><tr>
-      <td class=”total-label” colspan=”${colspan}”>Total</td>
-      <td class=”total-val num pesos”>${esc(pesos(totalPesos))}</td>
-      <td class=”noexp”></td>
-    </tr></tfoot>` : ''}
-  </table>`;
+    const tr = tbody.insertRow();
+
+    const tdName = tr.insertCell();
+    tdName.className = 'name';
+    tdName.contentEditable = 'true';
+    tdName.dataset.uid = it.uid;
+    tdName.textContent = it.name;
+    tdName.addEventListener('blur', () => { it.name = tdName.textContent.trim(); });
+
+    const tdSuc = tr.insertCell();
+    tdSuc.textContent = it.sucursal;
+
+    if (showUsd) {
+      const tdUsd = tr.insertCell();
+      tdUsd.className = 'num';
+      tdUsd.textContent = 'USD ' + usdFmt(it.priceUsd);
+    }
+
+    const tdPesos = tr.insertCell();
+    tdPesos.className = 'num pesos';
+    tdPesos.textContent = pesos(pesoVal);
+
+    const tdDel = tr.insertCell();
+    tdDel.className = 'num noexp';
+    const btn = document.createElement('button');
+    btn.className = 'del';
+    btn.title = 'Quitar';
+    btn.textContent = '✕';
+    btn.addEventListener('click', () => {
+      stockQuote = stockQuote.filter(q => q.uid !== it.uid);
+      renderStockQuote();
+    });
+    tdDel.appendChild(btn);
+  });
+
+  if (showTotal) {
+    const tfoot = table.createTFoot();
+    const frow  = tfoot.insertRow();
+    const tdLabel = frow.insertCell();
+    tdLabel.className = 'total-label';
+    tdLabel.colSpan = showUsd ? 3 : 2;
+    tdLabel.textContent = 'Total';
+    const tdVal = frow.insertCell();
+    tdVal.className = 'total-val num pesos';
+    tdVal.textContent = pesos(totalPesos);
+    const tdEmpty = frow.insertCell();
+    tdEmpty.className = 'noexp';
+  }
+
+  box.appendChild(table);
 }
 
 $('stock-search').addEventListener('input', renderStockResults);
 $('refresh-stock').addEventListener('click', () => fetchStock(true));
-$('stock-box').addEventListener('blur', e => {
-  const cell = e.target.closest('.name[contenteditable]');
-  if (!cell) return;
-  const item = stockQuote.find(q => q.uid === cell.dataset.uid);
-  if (item) item.name = cell.textContent.trim();
-}, true);
-$('stock-box').addEventListener('click', e => {
-  const btn = e.target.closest('.del');
-  if (!btn) return;
-  stockQuote = stockQuote.filter(q => q.uid !== btn.dataset.uid);
-  renderStockQuote();
-});
 function stockAdd(i) {
   const p = stockResults[i];
   if (!p) return;
