@@ -1005,16 +1005,20 @@ async function fetchStock(force = false) {
     const text = await res.text();
     const rows = text.split(/\r?\n/).map(parseCSVLine);
     if (rows.length < 2) throw new Error('Sin datos');
-    stockHeaders = rows[0].slice(0, 5).map(h => h.trim());
+    // Columnas: 0=MODELO 1=ALM.GB 2=COLOR 3=BATERIA 4=PRECIO VENTA(USD) 5=DESCRIPCION 8=SUCURSAL
+    stockHeaders = [0,1,2,3,5].map(i => (rows[0][i] || '').trim());
     stockCatalog = rows.slice(1)
       .map(r => {
-        const priceRaw = (r[5] || '').replace(/[^0-9.,]/g, '');
+        const priceRaw = (r[4] || '').replace(/[^0-9.,]/g, '');
         const priceUsd = parseNum(priceRaw);
-        const sucursalRaw = (r[6] || '').trim();
-        const sucursal = sucursalRaw ? sucursalRaw : 'Morteros';
-        return { cols: r.slice(0, 5).map(s => s.trim()), priceUsd: isNaN(priceUsd) ? 0 : priceUsd, sucursal };
+        const sucursalRaw = (r[8] || '').trim();
+        return {
+          cols: [0,1,2,3,5].map(i => (r[i] || '').trim()),
+          priceUsd: isNaN(priceUsd) ? 0 : priceUsd,
+          sucursal: sucursalRaw || 'Morteros',
+        };
       })
-      .filter(p => p.priceUsd > 0 && p.cols.some(c => c));
+      .filter(p => p.priceUsd > 0);
     localStorage.setItem(STOCK_KEY, JSON.stringify({ ts: Date.now(), data: stockCatalog, headers: stockHeaders }));
     status.textContent = stockCatalog.length + ' articulos en stock';
     renderStockResults();
