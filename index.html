@@ -66,7 +66,7 @@ select:focus,.input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--te
 .results:empty{display:none}
 .result-row{display:flex;align-items:center;justify-content:space-between;
   gap:8px;padding:9px 12px;border-bottom:1px solid var(--zebra);cursor:pointer;
-  transition:.1s}
+  user-select:none;-webkit-user-select:none;transition:.1s}
 .result-row:last-child{border-bottom:none}
 .result-row:hover{background:var(--teal-l)}
 .result-row .rn{font-size:13px;font-weight:600}
@@ -1032,7 +1032,7 @@ function renderStockResults() {
   if (!q) { box.innerHTML = ''; return; }
   if (!stockCatalog.length) { box.innerHTML = ''; return; }
   let list = stockCatalog.filter(p =>
-    p.priceUsd > 0 && p.cols.some(c => c.toLowerCase().includes(q)));
+    p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q));
   list = list.slice(0, 150);
   if (!list.length) {
     box.innerHTML = '<div class=”result-empty”>Sin resultados para esa búsqueda.</div>'; return;
@@ -1042,7 +1042,7 @@ function renderStockResults() {
     const partes = [modelo, alm ? alm + 'GB' : '', color, bat ? 'BAT ' + bat + '%' : '', desc].filter(Boolean).join(' · ');
     const pesoVal = rate ? Math.round(p.priceUsd * rate) : null;
     const precioStr = 'USD ' + usdFmt(p.priceUsd) + (pesoVal ? ' · ' + pesos(pesoVal) : '');
-    return `<div class=”result-row” onclick=”stockAddItem(this)”
+    return `<div class=”result-row”
       data-s0=”${esc(modelo)}” data-s1=”${esc(alm)}” data-s2=”${esc(color)}”
       data-s3=”${esc(bat)}” data-s4=”${esc(desc)}”
       data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
@@ -1086,6 +1086,11 @@ function renderStockQuote() {
 }
 
 $('stock-search').addEventListener('input', renderStockResults);
+$('stock-results').addEventListener('click', e => {
+  const row = e.target.closest('.result-row');
+  if (!row) return;
+  stockAddItem(row);
+});
 $('refresh-stock').addEventListener('click', () => fetchStock(true));
 $('stock-box').addEventListener('blur', e => {
   const cell = e.target.closest('.name[contenteditable]');
