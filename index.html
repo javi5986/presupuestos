@@ -21,6 +21,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .wrap{max-width:1180px;margin:0 auto;padding:16px 16px 64px}
 .grid{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
 @media(max-width:820px){.grid{grid-template-columns:1fr}}
+.stock-grid{display:grid;grid-template-columns:1fr 380px;gap:18px;align-items:start;margin-top:18px}
+@media(max-width:820px){.stock-grid{grid-template-columns:1fr}}
+#stock-results{max-height:340px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:4px}
 
 /* â”€â”€â”€ App header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .app-head{display:flex;flex-wrap:wrap;gap:14px;align-items:center;
@@ -239,7 +242,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
   </div>
 
   <!-- Stock Usados -->
-  <div class="grid" style="margin-top:18px;grid-template-columns:1fr 380px">
+  <div class="stock-grid">
 
     <!-- LEFT: Stock search -->
     <div class="card">
@@ -971,6 +974,7 @@ const STOCK_KEY  = 'presup_stock_v1';
 let stockCatalog = [];
 let stockHeaders = [];
 let stockQuote   = [];
+let stockResults = [];
 
 async function fetchStock(force = false) {
   const status = $('stock-status');
@@ -1029,25 +1033,21 @@ async function fetchStock(force = false) {
 function renderStockResults() {
   const q   = $('stock-search').value.trim().toLowerCase();
   const box = $('stock-results');
-  if (!q) { box.innerHTML = ''; return; }
-  if (!stockCatalog.length) { box.innerHTML = ''; return; }
-  let list = stockCatalog.filter(p =>
-    p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q));
-  list = list.slice(0, 150);
-  if (!list.length) {
+  if (!q) { stockResults = []; box.innerHTML = ''; return; }
+  if (!stockCatalog.length) { stockResults = []; box.innerHTML = ''; return; }
+  stockResults = stockCatalog.filter(p =>
+    p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q)).slice(0, 150);
+  if (!stockResults.length) {
     box.innerHTML = '<div class=”result-empty”>Sin resultados para esa búsqueda.</div>'; return;
   }
-  box.innerHTML = list.map(p => {
-    const [modelo, alm, color, bat, desc] = p.cols;
-    const partes = [modelo, alm ? alm + 'GB' : '', color, bat ? 'BAT ' + bat + '%' : '', desc].filter(Boolean).join(' · ');
+  box.innerHTML = stockResults.map((p, i) => {
+    const [modelo, , , bat] = p.cols;
     const pesoVal = rate ? Math.round(p.priceUsd * rate) : null;
     const precioStr = 'USD ' + usdFmt(p.priceUsd) + (pesoVal ? ' · ' + pesos(pesoVal) : '');
-    return `<div class=”result-row”
-      data-s0=”${esc(modelo)}” data-s1=”${esc(alm)}” data-s2=”${esc(color)}”
-      data-s3=”${esc(bat)}” data-s4=”${esc(desc)}”
-      data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
-      <span class=”rn”>${esc(partes)}<span class=”rtag”>${esc(p.sucursal)}</span></span>
-      <span class=”rp”>${esc(precioStr)}</span>
+    const batStr = bat ? 'BAT ' + bat + '%' : '';
+    return `<div class=”result-row” onclick=”stockAdd(${i})”>
+      <span class=”rn”>${esc(modelo)}<span class=”rtag”>${esc(p.sucursal)}</span></span>
+      <span class=”rp”>${esc(batStr || precioStr)}</span>
     </div>`;
   }).join('');
 }
@@ -1086,11 +1086,6 @@ function renderStockQuote() {
 }
 
 $('stock-search').addEventListener('input', renderStockResults);
-$('stock-results').addEventListener('click', e => {
-  const row = e.target.closest('.result-row');
-  if (!row) return;
-  stockAddItem(row);
-});
 $('refresh-stock').addEventListener('click', () => fetchStock(true));
 $('stock-box').addEventListener('blur', e => {
   const cell = e.target.closest('.name[contenteditable]');
@@ -1104,12 +1099,14 @@ $('stock-box').addEventListener('click', e => {
   stockQuote = stockQuote.filter(q => q.uid !== btn.dataset.uid);
   renderStockQuote();
 });
-function stockAddItem(el) {
-  const { s0, s1, s2, s3, s4, priceUsd, sucursal } = el.dataset;
-  const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
-  stockQuote.push({ uid: uid(), name, priceUsd: Number(priceUsd), sucursal: sucursal || 'Morteros' });
+function stockAdd(i) {
+  const p = stockResults[i];
+  if (!p) return;
+  const [modelo, alm, color, bat, desc] = p.cols;
+  const name = [modelo, alm ? alm+'GB' : '', color, bat ? 'BAT '+bat+'%' : '', desc].filter(Boolean).join(' - ');
+  stockQuote.push({ uid: uid(), name, priceUsd: p.priceUsd, sucursal: p.sucursal });
   renderStockQuote();
-  toast((s0 || 'Artículo') + ' agregado');
+  toast((modelo || 'Artículo') + ' agregado');
 }
 $('stock-clear').addEventListener('click', () => { stockQuote = []; renderStockQuote(); });
 $('stock-show-usd').addEventListener('change', renderStockQuote);
