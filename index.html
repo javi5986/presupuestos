@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Presupuestos AG</title>
-fetchRate();
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root {
@@ -273,73 +272,73 @@ let quote   = [];   // [{ uid, name, price, cur }]
 let rate    = 0;    // pesos por USD
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-let toastTimer;
-function toast(msg, isErr = false) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.toggle('err', isErr);
-  el.classList.add('on');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('on'), 2400);
+const $ = id => document.getElementById(id); // shorthand para acceder elementos del DOM por ID
+let toastTimer; // referencia al timer del toast para poder cancelarlo si llega otro mensaje
+function toast(msg, isErr = false) { // muestra un mensaje temporal en la esquina superior
+  const el = $('toast'); // obtenemos el elemento del toast del DOM
+  el.textContent = msg; // establecemos el texto del mensaje
+  el.classList.toggle('err', isErr); // agregamos clase 'err' si isErr es true (rojo)
+  el.classList.add('on'); // mostramos el toast agregando clase 'on'
+  clearTimeout(toastTimer); // cancelamos el timer anterior si existe (evita conflictos)
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2400); // ocultamos después de 2.4 segundos
 }
 
-const pesoFmt = new Intl.NumberFormat('es-AR', {
+const pesoFmt = new Intl.NumberFormat('es-AR', { // formatea números como pesos argentinos
   style: 'currency', currency: 'ARS',
   minimumFractionDigits: 0, maximumFractionDigits: 0,
 });
-const pesos  = v => pesoFmt.format(Math.round(v));
-const usdFmt = v => Number.isInteger(v) ? String(v) : v.toFixed(2);
-const uid    = () => Math.random().toString(36).slice(2, 9);
+const pesos  = v => pesoFmt.format(Math.round(v)); // convierte valor a pesos argentinos (sin decimales)
+const usdFmt = v => Number.isInteger(v) ? String(v) : v.toFixed(2); // formatea USD: enteros sin decimales, otros con 2
+const uid    = () => Math.random().toString(36).slice(2, 9); // genera ID único aleatorio de 7 caracteres
 
-function pesosOf(item) {
-  return item.cur === 'A' ? Math.round(item.price) : Math.round(item.price * rate);
+function pesosOf(item) { // convierte el precio del item a pesos según su moneda original
+  return item.cur === 'A' ? Math.round(item.price) : Math.round(item.price * rate); // si es ARS devuelve entero, si USD multiplica por cotización
 }
-function usdCell(item) {
-  if (item.cur === 'U') return 'USD ' + usdFmt(item.price);
-  return rate ? '≈ USD ' + usdFmt(Math.round(item.price / rate)) : '—';
+function usdCell(item) { // retorna la conversión a USD del precio, o '—' si no hay cotización
+  if (item.cur === 'U') return 'USD ' + usdFmt(item.price); // si ya está en USD lo devuelve formateado
+  return rate ? '≈ USD ' + usdFmt(Math.round(item.price / rate)) : '—'; // sino divide por rate o muestra '—'
 }
 
 // ─── Dólar Blue ───────────────────────────────────────────────────────────────────────────────────────────────
-async function fetchRate() {
-  const meta = $('rate-meta');
-  meta.textContent = 'Consultando...';
+async function fetchRate() { // obtiene la cotización del dólar blue de la API
+  const meta = $('rate-meta'); // elemento donde mostramos el estado/resultado de la consulta
+  meta.textContent = 'Consultando...'; // indicador de carga mientras consultamos
   try {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch('https://dolarapi.com/v1/dolares/blue',
-      { cache: 'no-store', signal: ctrl.signal });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const d = await res.json();
-    rate = Number(d.venta) + 10;
-    $('rate').value = rate;
-    localStorage.setItem(RATE_KEY, rate);
-    const ts = d.fechaActualizacion
-      ? new Date(d.fechaActualizacion)
-      : new Date();
-    meta.innerHTML =
+    const ctrl = new AbortController(); // creamos controlador para poder cancelar la petición
+    setTimeout(() => ctrl.abort(), 8000); // cancelamos si tarda más de 8 segundos
+    const res = await fetch('https://dolarapi.com/v1/dolares/blue', // llamamos a dolarapi
+      { cache: 'no-store', signal: ctrl.signal }); // no cacheamos, usamos abort signal
+    if (!res.ok) throw new Error('HTTP ' + res.status); // si falla HTTP, lanzamos error
+    const d = await res.json(); // parseamos respuesta JSON
+    rate = Number(d.venta) + 10; // sumamos $10 al precio de venta (margen local)
+    $('rate').value = rate; // actualizamos el input del usuario
+    localStorage.setItem(RATE_KEY, rate); // guardamos en localStorage para offline
+    const ts = d.fechaActualizacion // obtenemos timestamp de actualización del servidor
+      ? new Date(d.fechaActualizacion) // parsea timestamp del servidor
+      : new Date(); // o usamos hora actual
+    meta.innerHTML = // mostramos cotización actualizada
       'Blue $' + d.venta + ' +$10<br>' +
       ts.toLocaleString('es-AR', { day:'2-digit', month:'2-digit',
         hour:'2-digit', minute:'2-digit' });
-    renderQuote();
-  } catch (e) {
-    const saved = localStorage.getItem(RATE_KEY);
-    if (saved) {
-      rate = Number(saved);
-      $('rate').value = rate;
-      meta.innerHTML = 'Sin conexión — último valor guardado';
-    } else {
-      meta.innerHTML = 'No se pudo obtener el dólar.<br>Ingresalo manualmente.';
+    renderQuote(); // re-renderiza los presupuestos con nueva cotización
+  } catch (e) { // si falla la consulta
+    const saved = localStorage.getItem(RATE_KEY); // intentamos usar valor guardado
+    if (saved) { // si tenemos valor en caché
+      rate = Number(saved); // usamos el valor guardado
+      $('rate').value = rate; // mostramos en input
+      meta.innerHTML = 'Sin conexión — último valor guardado'; // informamos al usuario
+    } else { // si no hay valor guardado
+      meta.innerHTML = 'No se pudo obtener el dólar.<br>Ingresalo manualmente.'; // pedimos que lo ingrese manualmente
     }
-    toast('No se pudo actualizar el dólar blue', true);
+    toast('No se pudo actualizar el dólar blue', true); // mostramos notificación de error
   }
 }
 
-$('rate').addEventListener('input', () => {
-  rate = Number($('rate').value) || 0;
-  renderQuote();
+$('rate').addEventListener('input', () => { // cuando el usuario cambia el valor del dólar manualmente
+  rate = Number($('rate').value) || 0; // parseamos el nuevo valor (0 si está vacío)
+  renderQuote(); // re-renderiza los presupuestos con nueva cotización
 });
-$('refresh-rate').addEventListener('click', fetchRate);
+$('refresh-rate').addEventListener('click', fetchRate); // al hacer click en botón refresh, actualiza cotización
 
 // stub hasta Task 5
 function renderQuote() {}
