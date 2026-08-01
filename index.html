@@ -796,6 +796,120 @@ $('results').addEventListener('click', e => {
 });
 
 
+// â”€â”€â”€ Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Copia el presupuesto como texto plano al portapapeles para compartir por WhatsApp/email
+function copyText() {
+  // Verifica que haya al menos un item en el presupuesto
+  if (!quote.length) { toast('El presupuesto está vacío', true); return; }
+  // Lee el título del presupuesto desde el elemento editable
+  const title = $('qtitle').textContent.trim();
+  // Construye array de líneas con encabezado y título si existe
+  const lines = title ? ['Presupuesto AG', title, ''] : ['Presupuesto AG', ''];
+  // Agrega cada item del presupuesto en formato “Nombre: $Pesos”
+  quote.forEach(it => lines.push(it.name + ': ' + pesos(pesosOf(it))));
+  // Calcula el total sumando montos de todos los items
+  const total = quote.reduce((s, it) => s + pesosOf(it), 0);
+  // Agrega separador y línea de total
+  lines.push('');
+  lines.push('TOTAL: ' + pesos(total));
+  // Si está habilitada, agrega leyenda sobre variación de precios
+  if ($('show-leyenda').checked) {
+    lines.push('');
+    lines.push('* Precios en pesos sujetos a variación del tipo de cambio');
+  }
+  // Copia el texto al portapapeles y muestra confirmación o error
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => toast('Texto copiado'))
+    .catch(() => toast('No se pudo copiar el texto', true));
+}
+
+// Genera un canvas con la imagen renderizada del presupuesto usando html2canvas
+async function makeCanvas() {
+  // Verifica que haya al menos un item en el presupuesto
+  if (!quote.length) { toast('El presupuesto está vacío', true); return null; }
+  // Valida que la librería html2canvas esté cargada en la página
+  if (typeof html2canvas === 'undefined') {
+    toast('Cargando módulo de imagen, intentá de nuevo', true);
+    return null;
+  }
+  // Obtiene referencia al elemento que contiene el presupuesto a exportar
+  const src  = $('capture');
+  // Clona el nodo para no modificar el DOM original
+  const wrap = src.cloneNode(true);
+  // Aplica estilos CSS en línea para posicionar fuera de pantalla y con formato de exportación
+  wrap.style.cssText = [
+    'position:fixed', 'left:-9999px', 'top:0',
+    'background:#fff', 'padding:24px', 'border-radius:16px',
+    'min-width:520px', 'width:auto',
+    'font-family:-apple-system,BlinkMacSystemFont,”Segoe UI”,Roboto,Helvetica,Arial,sans-serif',
+  ].join(';');
+  // Elimina elementos con clase .noexp (botones de eliminar, etc. que no deben aparecer en la imagen)
+  wrap.querySelectorAll('.noexp').forEach(el => el.remove());
+  // Elimina atributo contenteditable para que el texto no sea editable en la imagen
+  wrap.querySelectorAll('[contenteditable]').forEach(el =>
+    el.removeAttribute('contenteditable'));
+  // Asegura que las imágenes embebidas en base64 se renderizen correctamente
+  wrap.querySelectorAll('img').forEach(img => {
+    if (img.src && img.src.startsWith('data:')) img.crossOrigin = '';
+  });
+  // Agrega el elemento clonado al DOM para que html2canvas pueda acceder a él
+  document.body.appendChild(wrap);
+  try {
+    // Genera canvas de alta resolución (escala 2) con fondo blanco y sin logging
+    return await html2canvas(wrap, {
+      scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true,
+    });
+  } finally {
+    // Elimina el elemento clonado del DOM después de generar la imagen
+    wrap.remove();
+  }
+}
+
+// Descarga el presupuesto como imagen PNG en el navegador
+async function downloadPNG() {
+  // Genera canvas con la imagen del presupuesto
+  const canvas = await makeCanvas();
+  // Si hay error generando canvas, detiene la función
+  if (!canvas) return;
+  // Crea elemento <a> temporal para descargar archivo
+  const a = document.createElement('a');
+  // Establece nombre del archivo con fecha en formato YYYY-MM-DD
+  a.download = 'presupuesto_' + new Date().toISOString().slice(0, 10) + '.png';
+  // Convierte canvas a URL data de PNG
+  a.href = canvas.toDataURL('image/png');
+  // Simula clic en el link para descargar el archivo
+  a.click();
+  // Muestra notificación de éxito
+  toast('Imagen descargada');
+}
+
+// Copia la imagen del presupuesto al portapapeles para pegar en apps (WhatsApp, etc.)
+async function copyImage() {
+  // Genera canvas con la imagen del presupuesto
+  const canvas = await makeCanvas();
+  // Si hay error generando canvas, detiene la función
+  if (!canvas) return;
+  try {
+    // Convierte canvas a blob de imagen PNG
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    // Escribe la imagen en el portapapeles usando ClipboardItem (API moderna)
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    // Muestra notificación de éxito
+    toast('Imagen copiada al portapapeles');
+  } catch (e) {
+    // Si el navegador no soporta copiar imágenes, sugiere usar Descargar
+    toast('Tu navegador no permite copiar imagen. Usá Descargar.', true);
+  }
+}
+
+// Conecta botones de exportación con sus funciones correspondientes
+$('btn-text').addEventListener('click', copyText);
+// Evento para descargar presupuesto como PNG
+$('btn-png').addEventListener('click', downloadPNG);
+// Evento para copiar presupuesto como imagen al portapapeles
+$('btn-copy-img').addEventListener('click', copyImage);
+
+
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
 document.getElementById('q-logo').src    = LOGO_B64;
@@ -803,6 +917,7 @@ document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 loadCatalog(); // carga catálogo desde Google Sheets o usa BAKED si falla
 fetchRate(); // obtiene cotización del dólar blue
+$('refresh-cat').addEventListener('click', () => loadCatalog(true)); // actualiza catálogo cuando usuario hace click en botón
 </script>
 </body>
 </html>
