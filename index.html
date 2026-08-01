@@ -614,8 +614,116 @@ $('rate').addEventListener('input', () => { // cuando el usuario cambia el valor
 });
 $('refresh-rate').addEventListener('click', fetchRate); // al hacer click en botón refresh, actualiza cotización
 
-// stub hasta Task 5
-function renderQuote() {}
+// Agrega producto al presupuesto y re-renderiza la tabla
+function addToQuote(product) {
+  // Crea nuevo item con uid único, copiando nombre, precio y moneda del producto
+  quote.push({ uid: uid(), name: product.name, price: product.price, cur: product.cur });
+  // Actualiza la visualización de la tabla de presupuesto
+  renderQuote();
+  // Muestra notificación de confirmación al usuario
+  toast(product.name + ' agregado');
+}
+
+// Elimina item del presupuesto por su uid único y re-renderiza la tabla
+function removeFromQuote(itemUid) {
+  // Filtra el array de presupuesto eliminando el item con ese uid
+  quote = quote.filter(q => q.uid !== itemUid);
+  // Actualiza la visualización de la tabla de presupuesto
+  renderQuote();
+}
+
+// Renderiza la tabla de presupuesto en #quote-box según estado actual del array global quote
+function renderQuote() {
+  // Lee valor actual del tipo de cambio desde input rate (0 si vacío)
+  rate = Number($('rate').value) || 0;
+  // Obtiene referencia al contenedor de la tabla
+  const box      = $('quote-box');
+  // Lee checkbox para mostrar/ocultar columna USD
+  const showUsd  = $('show-usd').checked;
+  // Obtiene referencia a la sección de leyenda
+  const leyenda  = $('leyenda');
+  // Muestra/oculta leyenda según checkbox show-leyenda
+  leyenda.style.display = $('show-leyenda').checked ? '' : 'none';
+
+  // Si el presupuesto está vacío, muestra mensaje vacío con ícono
+  if (!quote.length) {
+    box.innerHTML = `
+      <div class="q-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <path d="M9 12h6M9 16h4"/>
+        </svg>
+        Buscá productos a la izquierda y hacé clic para agregarlos.
+      </div>`;
+    return;
+  }
+
+  // Calcula el total en pesos sumando los montos de cada item usando pesosOf()
+  const total = quote.reduce((s, it) => s + pesosOf(it), 0);
+
+  // Crea filas de tabla a partir del array quote, cada una con nombre editable, USD, pesos y botón eliminar
+  const rows = quote.map(it => `
+    <tr>
+      <td class="name" contenteditable data-uid="${it.uid}">${esc(it.name)}</td>
+      ${showUsd ? `<td class="num">${esc(usdCell(it))}</td>` : ''}
+      <td class="num pesos">${esc(pesos(pesosOf(it)))}</td>
+      <td class="num noexp">
+        <button class="del" data-uid="${it.uid}" title="Quitar">✕</button>
+      </td>
+    </tr>`).join('');
+
+  // Renderiza tabla HTML completa con header, filas de items y footer con total
+  box.innerHTML = `
+    <table class="qtable">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          ${showUsd ? '<th class="num">USD</th>' : ''}
+          <th class="num">Pesos</th>
+          <th class="num noexp"></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td class="total-label" colspan="${showUsd ? 2 : 1}">Total</td>
+          <td class="total-val num pesos">${esc(pesos(total))}</td>
+          <td class="noexp"></td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+// Edición de nombre inline: captura cambios en celdas contenteditable y actualiza array quote
+$('quote-box').addEventListener('blur', e => {
+  // Busca la celda .name[contenteditable] más cercana al elemento que perdió foco
+  const cell = e.target.closest('.name[contenteditable]');
+  // Si no es una celda editable, ignora el evento
+  if (!cell) return;
+  // Busca el item en quote que coincida con el uid de la celda
+  const item = quote.find(q => q.uid === cell.dataset.uid);
+  // Si existe, actualiza el nombre con el contenido trimmed de la celda
+  if (item) item.name = cell.textContent.trim();
+}, true);
+
+// Eliminar item: captura clics en botones .del y ejecuta removeFromQuote con su uid
+$('quote-box').addEventListener('click', e => {
+  // Busca el botón .del más cercano al elemento clickeado
+  const btn = e.target.closest('.del');
+  // Si no es un botón de eliminar, ignora el evento
+  if (!btn) return;
+  // Elimina el item correspondiente del presupuesto usando su uid
+  removeFromQuote(btn.dataset.uid);
+});
+
+// Vaciar: al hacer clic en clear-quote, limpia el array quote y re-renderiza
+$('clear-quote').addEventListener('click', () => { quote = []; renderQuote(); });
+
+// Re-render al cambiar toggle USD: ejecuta renderQuote cuando cambia show-usd
+$('show-usd').addEventListener('change', renderQuote);
+// Re-render al cambiar toggle Leyenda: ejecuta renderQuote cuando cambia show-leyenda
+$('show-leyenda').addEventListener('change', renderQuote);
 
 // Retorna array de nombres únicos de hojas (categorías), ordenados alfabéticamente en español
 function sheetNames() {
@@ -687,8 +795,6 @@ $('results').addEventListener('click', e => {
   });
 });
 
-// stub hasta Task 5
-function addToQuote(product) {}
 
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
