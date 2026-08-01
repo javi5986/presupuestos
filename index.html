@@ -134,14 +134,15 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
 /* â”€â”€â”€ Export bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .export-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;
   padding-top:14px;border-top:1px solid var(--line)}
-.stock-overflow{overflow-x:auto;overflow-y:auto;max-height:420px}
-.stock-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-.stock-table thead th{background:var(--teal-l);color:var(--teal-d);padding:5px 8px;
-  text-align:left;font-size:11px;position:sticky;top:0;z-index:1}
+.stock-overflow{overflow-x:auto;overflow-y:auto;max-height:460px}
+.stock-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;table-layout:auto}
+.stock-table thead th{background:var(--teal-l);color:var(--teal-d);padding:5px 10px;
+  text-align:left;font-size:11px;position:sticky;top:0;z-index:1;white-space:nowrap}
 .stock-table tbody tr{cursor:pointer;transition:.1s}
 .stock-table tbody tr:hover{background:var(--teal-l)}
-.stock-table td{padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px}
-.stock-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+.stock-table td{padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;
+  cursor:pointer;user-select:text;-webkit-user-select:text}
+.stock-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* â”€â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
@@ -238,7 +239,7 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
   </div>
 
   <!-- Stock Usados -->
-  <div class="grid" style="margin-top:18px">
+  <div class="grid" style="margin-top:18px;grid-template-columns:1fr 380px">
 
     <!-- LEFT: Stock search -->
     <div class="card">
