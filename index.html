@@ -69,7 +69,9 @@ select:focus,.input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--te
 .results:empty{display:none}
 .result-row{display:flex;align-items:center;justify-content:space-between;
   gap:8px;padding:9px 12px;border-bottom:1px solid var(--zebra);cursor:pointer;
-  user-select:none;-webkit-user-select:none;transition:.1s}
+  user-select:none;-webkit-user-select:none;transition:.1s;
+  width:100%;border-left:none;border-right:none;border-top:none;
+  background:transparent;text-align:left;font-family:inherit;font-size:inherit;color:inherit}
 .result-row:last-child{border-bottom:none}
 .result-row:hover{background:var(--teal-l)}
 .result-row .rn{font-size:13px;font-weight:600}
@@ -1040,16 +1042,20 @@ function renderStockResults() {
   if (!stockResults.length) {
     box.innerHTML = '<div class=”result-empty”>Sin resultados para esa búsqueda.</div>'; return;
   }
-  box.innerHTML = stockResults.map((p, i) => {
+  box.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  stockResults.forEach((p, i) => {
     const [modelo, , , bat] = p.cols;
     const pesoVal = rate ? Math.round(p.priceUsd * rate) : null;
     const precioStr = 'USD ' + usdFmt(p.priceUsd) + (pesoVal ? ' · ' + pesos(pesoVal) : '');
-    const batStr = bat ? 'BAT ' + bat + '%' : '';
-    return `<div class=”result-row” onclick=”stockAdd(${i})”>
-      <span class=”rn”>${esc(modelo)}<span class=”rtag”>${esc(p.sucursal)}</span></span>
-      <span class=”rp”>${esc(batStr || precioStr)}</span>
-    </div>`;
-  }).join('');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'result-row';
+    btn.innerHTML = `<span class=”rn”>${esc(modelo)}</span><span class=”rp”>${esc(bat ? 'BAT ' + bat + '%' : precioStr)}</span>`;
+    btn.addEventListener('click', () => stockAdd(i));
+    frag.appendChild(btn);
+  });
+  box.appendChild(frag);
 }
 
 function renderStockQuote() {
