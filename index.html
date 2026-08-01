@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Presupuestos AG</title>
+fetchRate();
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root {
@@ -271,13 +272,85 @@ let catalog = [];   // [{ name, price, cur, sheet }]
 let quote   = [];   // [{ uid, name, price, cur }]
 let rate    = 0;    // pesos por USD
 
-// â”€â”€â”€ TODO: completar con Tasks 2-6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+let toastTimer;
+function toast(msg, isErr = false) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.toggle('err', isErr);
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2400);
+}
+
+const pesoFmt = new Intl.NumberFormat('es-AR', {
+  style: 'currency', currency: 'ARS',
+  minimumFractionDigits: 0, maximumFractionDigits: 0,
+});
+const pesos  = v => pesoFmt.format(Math.round(v));
+const usdFmt = v => Number.isInteger(v) ? String(v) : v.toFixed(2);
+const uid    = () => Math.random().toString(36).slice(2, 9);
+
+function pesosOf(item) {
+  return item.cur === 'A' ? Math.round(item.price) : Math.round(item.price * rate);
+}
+function usdCell(item) {
+  if (item.cur === 'U') return 'USD ' + usdFmt(item.price);
+  return rate ? '≈ USD ' + usdFmt(Math.round(item.price / rate)) : '—';
+}
+
+// ─── Dólar Blue ───────────────────────────────────────────────────────────────────────────────────────────────
+async function fetchRate() {
+  const meta = $('rate-meta');
+  meta.textContent = 'Consultando...';
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch('https://dolarapi.com/v1/dolares/blue',
+      { cache: 'no-store', signal: ctrl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    rate = Number(d.venta) + 10;
+    $('rate').value = rate;
+    localStorage.setItem(RATE_KEY, rate);
+    const ts = d.fechaActualizacion
+      ? new Date(d.fechaActualizacion)
+      : new Date();
+    meta.innerHTML =
+      'Blue $' + d.venta + ' +$10<br>' +
+      ts.toLocaleString('es-AR', { day:'2-digit', month:'2-digit',
+        hour:'2-digit', minute:'2-digit' });
+    renderQuote();
+  } catch (e) {
+    const saved = localStorage.getItem(RATE_KEY);
+    if (saved) {
+      rate = Number(saved);
+      $('rate').value = rate;
+      meta.innerHTML = 'Sin conexión — último valor guardado';
+    } else {
+      meta.innerHTML = 'No se pudo obtener el dólar.<br>Ingresalo manualmente.';
+    }
+    toast('No se pudo actualizar el dólar blue', true);
+  }
+}
+
+$('rate').addEventListener('input', () => {
+  rate = Number($('rate').value) || 0;
+  renderQuote();
+});
+$('refresh-rate').addEventListener('click', fetchRate);
+
+// stub hasta Task 5
+function renderQuote() {}
+
 
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
 document.getElementById('q-logo').src    = LOGO_B64;
 document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+fetchRate();
 </script>
 </body>
 </html>
