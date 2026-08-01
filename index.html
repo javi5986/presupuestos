@@ -1042,7 +1042,7 @@ function renderStockResults() {
     const partes = [modelo, alm ? alm + 'GB' : '', color, bat ? 'BAT ' + bat + '%' : '', desc].filter(Boolean).join(' · ');
     const pesoVal = rate ? Math.round(p.priceUsd * rate) : null;
     const precioStr = 'USD ' + usdFmt(p.priceUsd) + (pesoVal ? ' · ' + pesos(pesoVal) : '');
-    return `<div class=”result-row”
+    return `<div class=”result-row” onclick=”stockAddItem(this)”
       data-s0=”${esc(modelo)}” data-s1=”${esc(alm)}” data-s2=”${esc(color)}”
       data-s3=”${esc(bat)}” data-s4=”${esc(desc)}”
       data-price-usd=”${p.priceUsd}” data-sucursal=”${esc(p.sucursal)}”>
@@ -1050,15 +1050,6 @@ function renderStockResults() {
       <span class=”rp”>${esc(precioStr)}</span>
     </div>`;
   }).join('');
-  box.querySelectorAll('.result-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const { s0, s1, s2, s3, s4, priceUsd, sucursal } = row.dataset;
-      const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
-      stockQuote.push({ uid: uid(), name, priceUsd: Number(priceUsd), sucursal: sucursal || 'Morteros' });
-      renderStockQuote();
-      toast((s0 || 'Artículo') + ' agregado');
-    });
-  });
 }
 
 function renderStockQuote() {
@@ -1108,6 +1099,13 @@ $('stock-box').addEventListener('click', e => {
   stockQuote = stockQuote.filter(q => q.uid !== btn.dataset.uid);
   renderStockQuote();
 });
+function stockAddItem(el) {
+  const { s0, s1, s2, s3, s4, priceUsd, sucursal } = el.dataset;
+  const name = [s0, s1 ? s1+'GB' : '', s2, s3 ? 'BAT '+s3+'%' : '', s4].filter(Boolean).join(' - ');
+  stockQuote.push({ uid: uid(), name, priceUsd: Number(priceUsd), sucursal: sucursal || 'Morteros' });
+  renderStockQuote();
+  toast((s0 || 'Artículo') + ' agregado');
+}
 $('stock-clear').addEventListener('click', () => { stockQuote = []; renderStockQuote(); });
 $('stock-show-usd').addEventListener('change', renderStockQuote);
 $('stock-show-total').addEventListener('change', renderStockQuote);
