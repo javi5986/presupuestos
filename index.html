@@ -617,8 +617,78 @@ $('refresh-rate').addEventListener('click', fetchRate); // al hacer click en bot
 // stub hasta Task 5
 function renderQuote() {}
 
-// stub hasta Task 4
-function renderResults() {}
+// Retorna array de nombres únicos de hojas (categorías), ordenados alfabéticamente en español
+function sheetNames() {
+  return [...new Set(catalog.map(p => p.sheet))].sort((a, b) =>
+    a.localeCompare(b, 'es'));
+}
+
+// Refresca el selector de categoría con las hojas disponibles, manteniendo la selección actual
+function refreshCategorySelect() {
+  const sel = $('cat-sel'); // obtiene el elemento select de categoría
+  const cur = sel.value; // guarda la selección actual
+  // Crea opciones: primero "Todas", luego las categorías con escaping
+  sel.innerHTML = '<option value="__all">Todas las categorías</option>' +
+    sheetNames().map(n => `<option>${esc(n)}</option>`).join('');
+  // Si la selección anterior existe, la restaura
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+// Escapa caracteres HTML para evitar inyección de código
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+
+// Renderiza la lista de productos según búsqueda y categoría seleccionada
+function renderResults() {
+  refreshCategorySelect(); // actualiza las opciones de categoría
+  const q   = $('search').value.trim().toLowerCase(); // texto de búsqueda en minúsculas
+  const sh  = $('cat-sel').value; // valor de la categoría seleccionada
+  const box = $('results'); // contenedor donde se muestran los resultados
+  const showSheet = sh === '__all'; // flag para mostrar etiqueta de categoría
+
+  // Filtra catálogo: primero por categoría, luego por texto de búsqueda
+  let list = catalog.filter(p => sh === '__all' || p.sheet === sh);
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q));
+  // Ordena alfabéticamente en español y limita a 150 resultados
+  list.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  list = list.slice(0, 150);
+
+  // Si el catálogo está vacío, no renderiza nada
+  if (!catalog.length) { box.innerHTML = ''; return; }
+  // Si no hay resultados, muestra mensaje de búsqueda vacía
+  if (!list.length) {
+    box.innerHTML = '<div class="result-empty">Sin resultados para esa búsqueda.</div>';
+    return;
+  }
+
+  // Renderiza cada producto como una fila clickeable con nombre y precio
+  box.innerHTML = list.map(p => `
+    <div class="result-row" data-name="${esc(p.name)}" data-price="${p.price}" data-cur="${p.cur}" data-sheet="${esc(p.sheet)}">
+      <span class="rn">${esc(p.name)}${showSheet ? `<span class="rtag">${esc(p.sheet)}</span>` : ''}</span>
+      <span class="rp">${p.cur === 'U' ? 'USD ' + usdFmt(p.price) : '$' + p.price.toLocaleString('es-AR')}</span>
+    </div>`).join('');
+}
+
+// Event listener para búsqueda: re-renderiza resultados mientras el usuario escribe
+$('search').addEventListener('input', renderResults);
+// Event listener para categoría: re-renderiza resultados al cambiar de categoría
+$('cat-sel').addEventListener('change', renderResults);
+// Event listener para clics en resultados: extrae datos del producto y lo agrega al presupuesto
+$('results').addEventListener('click', e => {
+  const row = e.target.closest('.result-row'); // encuentra la fila clickeada
+  if (!row) return; // ignora clics fuera de una fila
+  addToQuote({
+    name:  row.dataset.name,
+    price: parseFloat(row.dataset.price),
+    cur:   row.dataset.cur,
+    sheet: row.dataset.sheet,
+  });
+});
+
+// stub hasta Task 5
+function addToQuote(product) {}
 
 // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.getElementById('head-logo').src = LOGO_B64;
