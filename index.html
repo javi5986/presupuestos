@@ -27,7 +27,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 /* ─── Plan Canje ─────────────────────────────────────────────────────────── */
 .canje-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:18px}
 @media(max-width:820px){.canje-grid{grid-template-columns:1fr}}
-#canje-new-results,#canje-trade-results{max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:4px}
+#canje-cat-results,#canje-stock-results,#canje-trade-results{max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:4px}
 td.neg{color:var(--danger)!important;font-weight:700}
 
 /* â”€â”€â”€ App header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -302,11 +302,16 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       <div class="card-body">
         <p id="canje-status" class="cat-status">No cargado</p>
         <div class="field">
-          <label>Equipo Nuevo / Usado a Presupuestar</label>
-          <input class="input" id="canje-new-search" type="text" placeholder="Buscar iPhone..." autocomplete="off">
+          <label>iPhone Nuevo (Catálogo)</label>
+          <input class="input" id="canje-cat-search" type="text" placeholder="Ej: 16, 15 Pro Max..." autocomplete="off">
         </div>
-        <div id="canje-new-results"></div>
-        <div class="field" style="margin-top:14px">
+        <div id="canje-cat-results"></div>
+        <div class="field" style="margin-top:12px">
+          <label>iPhone Usado (Stock)</label>
+          <input class="input" id="canje-stock-search" type="text" placeholder="Buscar en stock de usados..." autocomplete="off">
+        </div>
+        <div id="canje-stock-results"></div>
+        <div class="field" style="margin-top:12px">
           <label>Equipo que Entrega el Cliente</label>
           <input class="input" id="canje-trade-search" type="text" placeholder="Buscar iPhone a entregar..." autocomplete="off">
         </div>
@@ -318,7 +323,12 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     <div class="card">
       <div class="card-head">
         <h2>Presupuesto Canje</h2>
-        <button class="btn btn-ghost" id="canje-clear">Limpiar</button>
+        <div class="tools">
+          <label class="toggle"><input type="checkbox" id="canje-show-usd" checked> USD</label>
+          <label class="toggle"><input type="checkbox" id="canje-show-total" checked> Total</label>
+          <label class="toggle"><input type="checkbox" id="canje-show-leyenda" checked> Leyenda</label>
+          <button class="btn btn-ghost" id="canje-clear">Limpiar</button>
+        </div>
       </div>
       <div class="card-body">
         <div id="canje-capture">
@@ -327,6 +337,9 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
             <span id="canje-q-date" class="q-date"></span>
           </div>
           <div id="canje-box"></div>
+          <div id="canje-leyenda" class="leyenda">
+            * Precios en pesos sujetos a variación del tipo de cambio
+          </div>
         </div>
         <div class="export-bar">
           <button class="btn" id="canje-btn-text">Copiar texto</button>
@@ -1264,8 +1277,9 @@ const CANJE_KEY = 'presup_canje_v1';
 let canjeData     = []; // [{ model, storage, batLabel, tomaUsd }]
 let canjeNew      = null; // { name, priceUsd }
 let canjeTradeIn  = null; // { model, storage, batLabel, tomaUsd }
-let canjeNewRes   = [];
-let canjeTradeRes = [];
+let canjeCatRes   = []; // resultados buscador catálogo
+let canjeStockRes = []; // resultados buscador stock usados
+let canjeTradeRes = []; // resultados buscador equipo a entregar
 
 // Columnas TOMA del CSV "precio usados" (filas 0-1 = encabezados, datos desde fila 2)
 const BAT_LEVELS = [
@@ -1317,37 +1331,62 @@ async function fetchCanje() {
   }
 }
 
-function renderCanjeNewResults() {
-  const q   = $('canje-new-search').value.trim().toLowerCase();
-  const box = $('canje-new-results');
-  if (!q) { canjeNewRes = []; box.innerHTML = ''; return; }
+// Helper: seleccionar equipo nuevo y limpiar ambos buscadores
+function canjeSetNew(item) {
+  canjeNew = item;
+  $('canje-cat-search').value   = ''; $('canje-cat-results').innerHTML   = ''; canjeCatRes   = [];
+  $('canje-stock-search').value = ''; $('canje-stock-results').innerHTML = ''; canjeStockRes = [];
+  renderCanjeTable();
+}
 
-  // Catálogo de nuevos (cur U = USD directo, cur A = convertir de pesos)
-  const fromCatalog = catalog
-    .filter(p => p.price > 0 && p.name.toLowerCase().includes(q))
+// Buscador 1: iPhone Nuevo desde catálogo (solo hoja Celulares, solo iPhones)
+function renderCanjeCatResults() {
+  const q   = $('canje-cat-search').value.trim().toLowerCase();
+  const box = $('canje-cat-results');
+  if (!q) { canjeCatRes = []; box.innerHTML = ''; return; }
+
+  canjeCatRes = catalog
+    .filter(p => p.price > 0 && p.sheet === 'Celulares'
+      && p.name.toLowerCase().includes('iphone')
+      && p.name.toLowerCase().includes(q))
     .map(p => ({ name: p.name, priceUsd: p.cur === 'U' ? p.price : (rate > 0 ? Math.round(p.price / rate) : 0) }))
-    .filter(p => p.priceUsd > 0);
+    .filter(p => p.priceUsd > 0)
+    .slice(0, 80);
 
-  // Stock de usados
-  const fromStock = stockCatalog
-    .filter(p => p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q))
-    .map(p => ({ name: [p.cols[0], p.cols[1] ? p.cols[1] + 'GB' : '', p.cols[2]].filter(Boolean).join(' '), priceUsd: p.priceUsd }));
-
-  canjeNewRes = [...fromCatalog, ...fromStock].slice(0, 100);
-  if (!canjeNewRes.length) { box.innerHTML = '<div class="result-empty">Sin resultados.</div>'; return; }
-
+  if (!canjeCatRes.length) { box.innerHTML = '<div class="result-empty">Sin resultados.</div>'; return; }
   box.innerHTML = '';
   const frag = document.createDocumentFragment();
-  canjeNewRes.forEach((p, i) => {
+  canjeCatRes.forEach((p, i) => {
     const pesoStr = rate ? ' · ' + pesos(Math.round(p.priceUsd * rate)) : '';
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'result-row';
     btn.innerHTML = `<span class="rn">${esc(p.name)}</span><span class="rp">USD ${usdFmt(p.priceUsd)}${esc(pesoStr)}</span>`;
-    btn.addEventListener('click', () => {
-      canjeNew = { name: canjeNewRes[i].name, priceUsd: canjeNewRes[i].priceUsd };
-      $('canje-new-search').value = ''; $('canje-new-results').innerHTML = ''; canjeNewRes = [];
-      renderCanjeTable();
-    });
+    btn.addEventListener('click', () => canjeSetNew({ name: canjeCatRes[i].name, priceUsd: canjeCatRes[i].priceUsd }));
+    frag.appendChild(btn);
+  });
+  box.appendChild(frag);
+}
+
+// Buscador 2: iPhone Usado desde stock de usados
+function renderCanjeStockResults() {
+  const q   = $('canje-stock-search').value.trim().toLowerCase();
+  const box = $('canje-stock-results');
+  if (!q) { canjeStockRes = []; box.innerHTML = ''; return; }
+
+  canjeStockRes = stockCatalog
+    .filter(p => p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q))
+    .map(p => ({ name: [p.cols[0], p.cols[1] ? p.cols[1] + 'GB' : '', p.cols[2]].filter(Boolean).join(' '), priceUsd: p.priceUsd }))
+    .slice(0, 80);
+
+  if (!canjeStockRes.length) { box.innerHTML = '<div class="result-empty">Sin resultados.</div>'; return; }
+  box.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  canjeStockRes.forEach((p, i) => {
+    const pesoStr = rate ? ' · ' + pesos(Math.round(p.priceUsd * rate)) : '';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'result-row';
+    btn.innerHTML = `<span class="rn">${esc(p.name)}</span><span class="rp">USD ${usdFmt(p.priceUsd)}${esc(pesoStr)}</span>`;
+    btn.addEventListener('click', () => canjeSetNew({ name: canjeStockRes[i].name, priceUsd: canjeStockRes[i].priceUsd }));
     frag.appendChild(btn);
   });
   box.appendChild(frag);
@@ -1381,7 +1420,10 @@ function renderCanjeTradeResults() {
 }
 
 function renderCanjeTable() {
-  const box = $('canje-box');
+  const box       = $('canje-box');
+  const showUsd   = $('canje-show-usd').checked;
+  const showTotal = $('canje-show-total').checked;
+  $('canje-leyenda').style.display = $('canje-show-leyenda').checked ? '' : 'none';
   box.innerHTML = '';
   if (!canjeNew && !canjeTradeIn) return;
 
@@ -1392,10 +1434,11 @@ function renderCanjeTable() {
   const table = document.createElement('table');
   table.className = 'qtable';
 
-  // Encabezados (col extra noexp para botones quitar)
+  // Encabezados según toggles activos
   const thead = table.createTHead();
   const hrow  = thead.insertRow();
-  [['Equipo', ''], ['USD', 'num'], ['Pesos', 'num'], ['', 'num noexp']].forEach(([t, cls]) => {
+  const heads = [['Equipo', ''], ...(showUsd ? [['USD', 'num']] : []), ['Pesos', 'num'], ['', 'num noexp']];
+  heads.forEach(([t, cls]) => {
     const th = document.createElement('th'); th.textContent = t;
     if (cls) th.className = cls;
     hrow.appendChild(th);
@@ -1403,14 +1446,16 @@ function renderCanjeTable() {
 
   const tbody = table.createTBody();
 
-  // Helper para agregar fila
+  // Helper para agregar fila de equipo
   const addRow = (labelText, usdVal, isNeg, onRemove, onEdit) => {
     const tr  = tbody.insertRow();
     const tdN = tr.insertCell(); tdN.className = 'name';
     tdN.contentEditable = 'true'; tdN.textContent = labelText;
     if (onEdit) tdN.addEventListener('blur', () => onEdit(tdN.textContent.trim()));
-    const tdU = tr.insertCell(); tdU.className = 'num' + (isNeg ? ' neg' : '');
-    tdU.textContent = (isNeg ? '-' : '') + 'USD ' + usdFmt(Math.abs(usdVal));
+    if (showUsd) {
+      const tdU = tr.insertCell(); tdU.className = 'num' + (isNeg ? ' neg' : '');
+      tdU.textContent = (isNeg ? '-' : '') + 'USD ' + usdFmt(Math.abs(usdVal));
+    }
     const tdP = tr.insertCell(); tdP.className = 'num pesos' + (isNeg ? ' neg' : '');
     tdP.textContent = rate ? (isNeg ? '-' : '') + pesos(Math.round(Math.abs(usdVal) * rate)) : '—';
     const tdDel = tr.insertCell(); tdDel.className = 'num noexp';
@@ -1434,13 +1479,16 @@ function renderCanjeTable() {
     );
   }
 
-  // Fila DIF solo si hay ambos
-  if (canjeNew && canjeTradeIn) {
+  // Fila DIF (solo si hay ambos y toggle activo)
+  if (canjeNew && canjeTradeIn && showTotal) {
     const tfoot = table.createTFoot();
     const frow  = tfoot.insertRow();
-    const tdL   = frow.insertCell(); tdL.className = 'total-label'; tdL.textContent = 'DIF';
-    const tdU   = frow.insertCell(); tdU.className = 'num'; tdU.textContent = 'USD ' + usdFmt(difUsd);
-    const tdP   = frow.insertCell(); tdP.className = 'num total-val pesos';
+    const colSpan = showUsd ? 1 : 0; // columnas antes de USD
+    const tdL = frow.insertCell(); tdL.className = 'total-label'; tdL.textContent = 'DIF';
+    if (showUsd) {
+      const tdU = frow.insertCell(); tdU.className = 'num'; tdU.textContent = 'USD ' + usdFmt(difUsd);
+    }
+    const tdP = frow.insertCell(); tdP.className = 'num total-val pesos';
     tdP.textContent = rate ? pesos(Math.round(difUsd * rate)) : '—';
     frow.insertCell().className = 'noexp';
   }
@@ -1465,12 +1513,17 @@ async function makeCanjeCanvas() {
 $('refresh-canje').addEventListener('click', () => fetchCanje());
 $('canje-clear').addEventListener('click', () => {
   canjeNew = null; canjeTradeIn = null;
-  $('canje-new-search').value = ''; $('canje-new-results').innerHTML = '';
-  $('canje-trade-search').value = ''; $('canje-trade-results').innerHTML = '';
+  $('canje-cat-search').value   = ''; $('canje-cat-results').innerHTML   = ''; canjeCatRes   = [];
+  $('canje-stock-search').value = ''; $('canje-stock-results').innerHTML = ''; canjeStockRes = [];
+  $('canje-trade-search').value = ''; $('canje-trade-results').innerHTML = ''; canjeTradeRes = [];
   renderCanjeTable();
 });
-$('canje-new-search').addEventListener('input', renderCanjeNewResults);
+$('canje-cat-search').addEventListener('input', renderCanjeCatResults);
+$('canje-stock-search').addEventListener('input', renderCanjeStockResults);
 $('canje-trade-search').addEventListener('input', renderCanjeTradeResults);
+$('canje-show-usd').addEventListener('change', renderCanjeTable);
+$('canje-show-total').addEventListener('change', renderCanjeTable);
+$('canje-show-leyenda').addEventListener('change', renderCanjeTable);
 
 $('canje-btn-text').addEventListener('click', () => {
   if (!canjeNew && !canjeTradeIn) { toast('El canje está vacío', true); return; }
