@@ -710,11 +710,14 @@ async function fetchRate() { // obtiene la cotización del dólar blue de la API
     const ts = d.fechaActualizacion // obtenemos timestamp de actualización del servidor
       ? new Date(d.fechaActualizacion) // parsea timestamp del servidor
       : new Date(); // o usamos hora actual
-    meta.innerHTML = // mostramos cotización actualizada
-      'Blue $' + d.venta + ' +$10<br>' +
+    // Construimos con nodos para evitar XSS con datos de la API
+    meta.textContent = '';
+    meta.appendChild(document.createTextNode('Blue $' + Number(d.venta) + ' +$10'));
+    meta.appendChild(document.createElement('br'));
+    meta.appendChild(document.createTextNode(
       ts.toLocaleString('es-AR', { day:'2-digit', month:'2-digit',
-        hour:'2-digit', minute:'2-digit' });
-    renderQuote(); // re-renderiza los presupuestos con nueva cotización
+        hour:'2-digit', minute:'2-digit' })));
+    renderQuote(); renderStockQuote(); renderCanjeTable(); // re-renderiza todas las secciones con nueva cotización
   } catch (e) { // si falla la consulta
     const saved = localStorage.getItem(RATE_KEY); // intentamos usar valor guardado
     if (saved) { // si tenemos valor en caché
@@ -730,7 +733,7 @@ async function fetchRate() { // obtiene la cotización del dólar blue de la API
 
 $('rate').addEventListener('input', () => { // cuando el usuario cambia el valor del dólar manualmente
   rate = Number($('rate').value) || 0; // parseamos el nuevo valor (0 si está vacío)
-  renderQuote(); // re-renderiza los presupuestos con nueva cotización
+  renderQuote(); renderStockQuote(); renderCanjeTable(); // sincroniza todas las secciones
 });
 $('refresh-rate').addEventListener('click', fetchRate); // al hacer click en botón refresh, actualiza cotización
 
@@ -944,46 +947,28 @@ function copyText() {
     .catch(() => toast('No se pudo copiar el texto', true));
 }
 
-// Genera un canvas con la imagen renderizada del presupuesto usando html2canvas
-async function makeCanvas() {
-  // Verifica que haya al menos un item en el presupuesto
-  if (!quote.length) { toast('El presupuesto está vacío', true); return null; }
-  // Valida que la librería html2canvas esté cargada en la página
-  if (typeof html2canvas === 'undefined') {
-    toast('Cargando módulo de imagen, intentá de nuevo', true);
-    return null;
-  }
-  // Obtiene referencia al elemento que contiene el presupuesto a exportar
-  const src  = $('capture');
-  // Clona el nodo para no modificar el DOM original
-  const wrap = src.cloneNode(true);
-  // Aplica estilos CSS en línea para posicionar fuera de pantalla y con formato de exportación
+// Genera un canvas a partir de un elemento del DOM (clonado fuera de pantalla)
+async function buildCanvas(elementId, minWidth) {
+  if (typeof html2canvas === 'undefined') { toast('Cargando módulo de imagen, intentá de nuevo', true); return null; }
+  const wrap = $(elementId).cloneNode(true);
   wrap.style.cssText = [
     'position:fixed', 'left:-9999px', 'top:0',
     'background:#fff', 'padding:24px', 'border-radius:16px',
-    'min-width:520px', 'width:auto',
+    'min-width:' + minWidth, 'width:auto',
     'font-family:-apple-system,BlinkMacSystemFont,”Segoe UI”,Roboto,Helvetica,Arial,sans-serif',
   ].join(';');
-  // Elimina elementos con clase .noexp (botones de eliminar, etc. que no deben aparecer en la imagen)
   wrap.querySelectorAll('.noexp').forEach(el => el.remove());
-  // Elimina atributo contenteditable para que el texto no sea editable en la imagen
-  wrap.querySelectorAll('[contenteditable]').forEach(el =>
-    el.removeAttribute('contenteditable'));
-  // Asegura que las imágenes embebidas en base64 se renderizen correctamente
-  wrap.querySelectorAll('img').forEach(img => {
-    if (img.src && img.src.startsWith('data:')) img.crossOrigin = '';
-  });
-  // Agrega el elemento clonado al DOM para que html2canvas pueda acceder a él
+  wrap.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+  wrap.querySelectorAll('img').forEach(img => { if (img.src && img.src.startsWith('data:')) img.crossOrigin = ''; });
   document.body.appendChild(wrap);
   try {
-    // Genera canvas de alta resolución (escala 2) con fondo blanco y sin logging
-    return await html2canvas(wrap, {
-      scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true,
-    });
-  } finally {
-    // Elimina el elemento clonado del DOM después de generar la imagen
-    wrap.remove();
-  }
+    return await html2canvas(wrap, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+  } finally { wrap.remove(); }
+}
+
+async function makeCanvas() {
+  if (!quote.length) { toast('El presupuesto está vacío', true); return null; }
+  return buildCanvas('capture', '520px');
 }
 
 // Descarga el presupuesto como imagen PNG en el navegador
@@ -1056,7 +1041,8 @@ async function fetchStock(force = false) {
   status.textContent = 'Actualizando stock...';
   try {
     const url = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_ID}/pub?output=csv&gid=${STOCK_GID}`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const rows = text.split(/\r?\n/).map(parseCSVLine);
@@ -1111,7 +1097,8 @@ function renderStockResults() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'result-row';
-    btn.innerHTML = `<span class=”rn”>${esc(modelo)}</span><span class=”rp”>${esc(bat ? 'BAT ' + bat + '%' : precioStr)}</span>`;
+    const label = modelo + (bat ? ' · BAT ' + bat + '%' : '');
+    btn.innerHTML = `<span class=”rn”>${esc(label)}</span><span class=”rp”>${esc(precioStr)}</span>`;
     btn.addEventListener('click', () => stockAdd(i));
     frag.appendChild(btn);
   });
@@ -1232,16 +1219,8 @@ $('stock-btn-text').addEventListener('click', () => {
 });
 
 async function makeStockCanvas() {
-  if (!stockQuote.length) { toast('El presupuesto esta vacio', true); return null; }
-  if (typeof html2canvas === 'undefined') { toast('Cargando modulo, intenta de nuevo', true); return null; }
-  const wrap = $('stock-capture').cloneNode(true);
-  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:24px;border-radius:16px;min-width:520px;width:auto;font-family:-apple-system,BlinkMacSystemFont,”Segoe UI”,Roboto,Helvetica,Arial,sans-serif';
-  wrap.querySelectorAll('.noexp').forEach(el => el.remove());
-  wrap.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
-  document.body.appendChild(wrap);
-  try {
-    return await html2canvas(wrap, { scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true });
-  } finally { wrap.remove(); }
+  if (!stockQuote.length) { toast('El presupuesto está vacío', true); return null; }
+  return buildCanvas('stock-capture', '520px');
 }
 
 $('stock-btn-png').addEventListener('click', async () => {
@@ -1265,7 +1244,6 @@ document.getElementById('q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 loadCatalog();
 fetchRate();
-localStorage.removeItem(STOCK_KEY);
 fetchStock();
 $('refresh-cat').addEventListener('click', () => loadCatalog(true));
 document.getElementById('stock-q-date').textContent =
@@ -1305,7 +1283,8 @@ async function fetchCanje() {
   status.textContent = 'Cargando precios de canje...';
   try {
     const url = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_ID}/pub?output=csv&gid=${CANJE_GID}`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const rows = text.split(/\r?\n/).map(parseCSVLine);
@@ -1326,6 +1305,16 @@ async function fetchCanje() {
     localStorage.setItem(CANJE_KEY, JSON.stringify({ ts: Date.now(), data: canjeData }));
     status.textContent = canjeData.length + ' opciones de canje';
   } catch(e) {
+    // Intentar usar cache aunque esté vencida (fallback offline)
+    try {
+      const raw = localStorage.getItem(CANJE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        canjeData = cached.data;
+        status.textContent = 'Sin conexión — usando caché (' + canjeData.length + ' opciones)';
+        return;
+      }
+    } catch(_) {}
     status.textContent = 'Error al cargar';
     toast('No se pudo cargar precios de canje', true);
   }
@@ -1483,7 +1472,6 @@ function renderCanjeTable() {
   if (canjeNew && canjeTradeIn && showTotal) {
     const tfoot = table.createTFoot();
     const frow  = tfoot.insertRow();
-    const colSpan = showUsd ? 1 : 0; // columnas antes de USD
     const tdL = frow.insertCell(); tdL.className = 'total-label'; tdL.textContent = 'DIF';
     if (showUsd) {
       const tdU = frow.insertCell(); tdU.className = 'num'; tdU.textContent = 'USD ' + usdFmt(difUsd);
@@ -1498,15 +1486,7 @@ function renderCanjeTable() {
 
 async function makeCanjeCanvas() {
   if (!canjeNew && !canjeTradeIn) { toast('El canje está vacío', true); return null; }
-  if (typeof html2canvas === 'undefined') { toast('Cargando módulo, intentá de nuevo', true); return null; }
-  const wrap = $('canje-capture').cloneNode(true);
-  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:24px;border-radius:16px;min-width:440px;width:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
-  wrap.querySelectorAll('.noexp').forEach(el => el.remove());
-  wrap.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
-  document.body.appendChild(wrap);
-  try {
-    return await html2canvas(wrap, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
-  } finally { wrap.remove(); }
+  return buildCanvas('canje-capture', '440px');
 }
 
 // Listeners Plan Canje
