@@ -1098,7 +1098,7 @@ function renderStockResults() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'result-row';
-    const label = modelo + (bat ? ' · BAT ' + bat + '%' : '');
+    const label = modelo + (bat ? ' · BAT ' + bat + '%' : '') + (p.sucursal ? ' · ' + p.sucursal : '');
     btn.innerHTML = `<span class=”rn”>${esc(label)}</span><span class=”rp”>${esc(precioStr)}</span>`;
     btn.addEventListener('click', () => stockAdd(i));
     frag.appendChild(btn);
