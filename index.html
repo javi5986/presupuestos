@@ -1100,6 +1100,7 @@ function renderStockResults() {
     btn.className = 'result-row';
     const label = modelo + (bat ? ' · BAT ' + bat + '%' : '') + (p.sucursal ? ' · ' + p.sucursal : '');
     btn.innerHTML = `<span class=”rn”>${esc(label)}</span><span class=”rp”>${esc(precioStr)}</span>`;
+    if (p.cols[4]) btn.title = p.cols[4];
     btn.addEventListener('click', () => stockAdd(i));
     frag.appendChild(btn);
   });
@@ -1365,7 +1366,7 @@ function renderCanjeStockResults() {
 
   canjeStockRes = stockCatalog
     .filter(p => p.priceUsd > 0 && p.cols[0].toLowerCase().includes(q))
-    .map(p => ({ name: [p.cols[0], p.cols[1] ? p.cols[1] + 'GB' : '', p.cols[2]].filter(Boolean).join(' '), priceUsd: p.priceUsd }))
+    .map(p => ({ name: [p.cols[0], p.cols[1] ? p.cols[1] + 'GB' : '', p.cols[2]].filter(Boolean).join(' '), priceUsd: p.priceUsd, desc: p.cols[4] }))
     .slice(0, 80);
 
   if (!canjeStockRes.length) { box.innerHTML = '<div class="result-empty">Sin resultados.</div>'; return; }
@@ -1376,6 +1377,7 @@ function renderCanjeStockResults() {
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'result-row';
     btn.innerHTML = `<span class="rn">${esc(p.name)}</span><span class="rp">USD ${usdFmt(p.priceUsd)}${esc(pesoStr)}</span>`;
+    if (p.desc) btn.title = p.desc;
     btn.addEventListener('click', () => canjeSetNew({ name: canjeStockRes[i].name, priceUsd: canjeStockRes[i].priceUsd }));
     frag.appendChild(btn);
   });
