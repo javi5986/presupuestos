@@ -190,11 +190,11 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     </div>
     <div class=”card-body” style=”display:flex;align-items:center;gap:10px”>
       <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>$ Pesos</span>
-      <input class=”input” id=”conv-pesos” type=”number” placeholder=”0” oninput=”convConvert('pesos')” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”numeric”>
+      <input class=”input” id=”conv-pesos” type=”number” min=”0” step=”1” placeholder=”0” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”numeric”>
       <span style=”color:var(--teal);font-size:18px;flex-shrink:0”>⇄</span>
       <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>USD</span>
-      <input class=”input” id=”conv-usd” type=”number” placeholder=”0” oninput=”convConvert('usd')” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”decimal”>
-      <button class=”btn btn-ghost” onclick=”convClear()” style=”flex-shrink:0”>✕</button>
+      <input class=”input” id=”conv-usd” type=”number” min=”0” step=”0.01” placeholder=”0.00” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”decimal”>
+      <button class=”btn btn-ghost” id=”conv-clear-btn” style=”flex-shrink:0”>✕</button>
     </div>
   </div>
 
@@ -1562,26 +1562,34 @@ document.getElementById('canje-q-date').textContent =
 fetchCanje(); // carga automática al iniciar
 
 // ─── Conversor de moneda ─────────────────────────────────────────────────────
-window.convConvert = function(from) {
-  var r = rate > 0 ? rate : (Number(document.getElementById('rate').value) || 0);
-  document.getElementById('conv-tc').textContent = r > 0 ? 'TC: ' + pesos(r) : '';
-  if (!r) return;
+(function() {
   var peEl = document.getElementById('conv-pesos');
   var udEl = document.getElementById('conv-usd');
-  if (from === 'pesos') {
-    var v = parseFloat(peEl.value);
-    if (isNaN(v)) { udEl.value = ''; return; }
-    var res = v / r;
-    udEl.value = res >= 1 ? res.toFixed(2) : res.toFixed(4);
-  } else {
-    var v = parseFloat(udEl.value);
-    peEl.value = isNaN(v) ? '' : Math.round(v * r);
-  }
-};
-window.convClear = function() {
-  document.getElementById('conv-pesos').value = '';
-  document.getElementById('conv-usd').value = '';
-};
+  var tcEl = document.getElementById('conv-tc');
+  var clEl = document.getElementById('conv-clear-btn');
+
+  function getR() { return rate > 0 ? rate : (Number(document.getElementById('rate').value) || 0); }
+  function showTc(r) { if (tcEl) tcEl.textContent = r > 0 ? 'TC: ' + pesos(r) : ''; }
+
+  peEl.addEventListener('input', function() {
+    var r = getR(); showTc(r);
+    var v = parseFloat(this.value);
+    udEl.value = (!isNaN(v) && r > 0) ? (v / r).toFixed(2) : '';
+  });
+
+  udEl.addEventListener('input', function() {
+    var r = getR(); showTc(r);
+    var v = parseFloat(this.value);
+    peEl.value = (!isNaN(v) && r > 0) ? Math.round(v * r) : '';
+  });
+
+  clEl.addEventListener('click', function() { peEl.value = ''; udEl.value = ''; });
+
+  // Actualizar TC cuando cambia el dólar manualmente
+  document.getElementById('rate').addEventListener('input', function() {
+    showTc(Number(this.value) || 0);
+  });
+})();
 </script>
 </body>
 </html>
