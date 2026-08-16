@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><!-- v15 -->
+﻿<!DOCTYPE html><!-- v16 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -154,6 +154,9 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
   box-shadow:0 10px 30px rgba(0,0,0,.3);white-space:nowrap}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--danger)}
+.conv-row{display:flex;flex-wrap:nowrap;align-items:center;gap:10px}
+.conv-break{display:none}
+@media(max-width:580px){.conv-row{flex-wrap:wrap}.conv-break{display:block;flex-basis:100%;height:0}}
 </style>
 </head>
 <body>
@@ -188,19 +191,19 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       <h2>Conversor</h2>
       <span class="cat-status" id="conv-tc"></span>
     </div>
-    <div class="card-body" style="display:flex;flex-wrap:nowrap;align-items:center;gap:10px">
+    <div class="card-body conv-row">
       <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap">$ Pesos</span>
       <input id="conv-pesos" type="text" placeholder="0" inputmode="numeric" autocomplete="off"
         style="flex:1;min-width:0;width:auto;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:var(--card);color:var(--ink);outline:none">
-      <span style="color:var(--teal);font-size:18px;flex-shrink:0">⇄</span>
+      <span style="color:var(--teal);font-size:18px;flex-shrink:0">⇄</span><span class="conv-break"></span>
       <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap">USD</span>
-      <input id="conv-usd" type="text" placeholder="0.00" inputmode="decimal" autocomplete="off"
+      <input id="conv-usd" type="text" placeholder="0,00" inputmode="decimal" autocomplete="off"
         style="flex:1;min-width:0;width:auto;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;background:var(--card);color:var(--ink);outline:none">
       <button id="conv-clear-btn" style="flex-shrink:0;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer">✕</button>
     </div>
   </div>
   <script>
-  // Script independiente del conversor — se ejecuta cuando los elementos ya existen en el DOM
+  // Script independiente del conversor
   (function() {
     var pe = document.getElementById('conv-pesos');
     var ud = document.getElementById('conv-usd');
@@ -209,31 +212,59 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     var ri = document.getElementById('rate');
     if (!pe || !ud || !cl) return;
 
-    function getR() { var v = parseFloat((ri && ri.value) || 0); return v > 0 ? v : 0; }
-    function showTC(r) { if (tc) tc.textContent = r > 0 ? ('TC: $' + Math.round(r).toLocaleString('es-AR')) : ''; }
-    function onlyNums(e, dec) {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      var skip = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End','Enter'];
-      for (var i = 0; i < skip.length; i++) { if (e.key === skip[i]) return; }
-      if (!(dec ? /^[0-9.]$/ : /^[0-9]$/).test(e.key)) e.preventDefault();
+    var fmtPe = new Intl.NumberFormat('es-AR', {maximumFractionDigits:0});
+    var fmtUd = new Intl.NumberFormat('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+    function parsePe(s) {
+      return parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0;
+    }
+    function parseUd(s) {
+      s = String(s).trim();
+      if (s.indexOf(',') >= 0) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+      return parseFloat(s) || 0;
     }
 
-    pe.addEventListener('keydown', function(e) { onlyNums(e, false); });
-    ud.addEventListener('keydown', function(e) { onlyNums(e, true); });
+    function getR() { var v = parseFloat((ri && ri.value) || 0); return v > 0 ? v : 0; }
+    function showTC(r) { if (tc) tc.textContent = r > 0 ? 'TC: $' + fmtPe.format(Math.round(r)) : ''; }
+
+    pe.addEventListener('keydown', function(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End','Enter'].indexOf(e.key) >= 0) return;
+      if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+    });
+    ud.addEventListener('keydown', function(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End','Enter'].indexOf(e.key) >= 0) return;
+      if (!/^[0-9.,]$/.test(e.key)) { e.preventDefault(); return; }
+      if ((e.key === '.' || e.key === ',') && /[.,]/.test(this.value)) e.preventDefault();
+    });
+
+    pe.addEventListener('focus', function() {
+      var v = parsePe(this.value); this.value = v ? String(Math.round(v)) : '';
+    });
+    ud.addEventListener('focus', function() {
+      var v = parseUd(this.value); this.value = v ? v.toFixed(2) : '';
+    });
+
+    pe.addEventListener('blur', function() {
+      var v = parsePe(this.value); if (v > 0) this.value = fmtPe.format(Math.round(v));
+    });
+    ud.addEventListener('blur', function() {
+      var v = parseUd(this.value); if (v > 0) this.value = fmtUd.format(v);
+    });
 
     pe.addEventListener('input', function() {
-      var r = getR(); showTC(r); if (!r) return;
-      var v = parseFloat(this.value);
-      ud.value = (isNaN(v) || v < 0) ? '' : (v / r).toFixed(2);
+      var r = getR(); showTC(r); if (!r) { ud.value = ''; return; }
+      var v = parsePe(this.value);
+      ud.value = v > 0 ? fmtUd.format(v / r) : '';
     });
     ud.addEventListener('input', function() {
-      var r = getR(); showTC(r); if (!r) return;
-      var v = parseFloat(this.value);
-      pe.value = (isNaN(v) || v < 0) ? '' : String(Math.round(v * r));
+      var r = getR(); showTC(r); if (!r) { pe.value = ''; return; }
+      var v = parseUd(this.value);
+      pe.value = v > 0 ? fmtPe.format(Math.round(v * r)) : '';
     });
 
     cl.addEventListener('click', function() { pe.value = ''; ud.value = ''; });
-
     if (ri) ri.addEventListener('input', function() { showTC(getR()); });
   })();
   </script>
