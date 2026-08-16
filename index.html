@@ -39,6 +39,21 @@ td.neg{color:var(--danger)!important;font-weight:700}
 .brand h1{font-size:18px;font-weight:800;margin:0;letter-spacing:-.2px}
 .cat-status{font-size:12px;color:var(--muted);margin:2px 0 0;min-height:16px}
 
+/* ─── Converter bar ──────────────────────────────────────────────────────── */
+.conv-bar{display:flex;align-items:center;gap:10px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:18px;flex-wrap:wrap}
+.conv-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.4px;white-space:nowrap}
+.conv-input{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:15px;
+  font-weight:600;color:var(--fg);background:var(--bg);width:130px;min-width:80px;
+  flex:1 1 80px;outline:none;transition:border-color .15s}
+.conv-input:focus{border-color:var(--teal-l)}
+.conv-sep{font-size:18px;color:var(--muted);flex-shrink:0}
+.conv-clear{border:none;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:18px;padding:2px 6px;border-radius:6px;line-height:1;flex-shrink:0}
+.conv-clear:hover{color:var(--danger);background:#fee2e2}
+@media(max-width:420px){.conv-input{font-size:14px}}
+
 /* â”€â”€â”€ Dollar chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .dollar-chip{display:flex;align-items:center;gap:12px;background:var(--card);
   border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;
@@ -181,8 +196,18 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     </div>
   </header>
 
+  <!-- ─── Converter bar ──────────────────────────────────────────────────── -->
+  <div class=”conv-bar”>
+    <span class=”conv-label”>$ Pesos</span>
+    <input class=”conv-input” id=”conv-pesos” type=”number” min=”0” placeholder=”0” autocomplete=”off”>
+    <span class=”conv-sep”>⇄</span>
+    <span class=”conv-label”>USD</span>
+    <input class=”conv-input” id=”conv-usd” type=”number” min=”0” placeholder=”0” autocomplete=”off”>
+    <button class=”conv-clear” id=”conv-clear” title=”Limpiar”>✕</button>
+  </div>
+
   <!-- â”€â”€â”€ Two-panel grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
-  <div class="grid">
+  <div class=”grid”>
 
     <!-- LEFT: Products panel -->
     <div class="card">
@@ -1543,6 +1568,33 @@ document.getElementById('canje-q-date').textContent =
   new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
 fetchCanje(); // carga automática al iniciar
+
+// ─── Conversor de moneda ─────────────────────────────────────────────────────
+(function() {
+  const inPesos = $('conv-pesos');
+  const inUsd   = $('conv-usd');
+  let updating  = false; // evita bucle de eventos
+
+  inPesos.addEventListener('input', () => {
+    if (updating) return;
+    updating = true;
+    const val = parseFloat(inPesos.value);
+    inUsd.value = (rate > 0 && val >= 0 && inPesos.value !== '') ? (val / rate).toFixed(2) : '';
+    updating = false;
+  });
+
+  inUsd.addEventListener('input', () => {
+    if (updating) return;
+    updating = true;
+    const val = parseFloat(inUsd.value);
+    inPesos.value = (rate > 0 && val >= 0 && inUsd.value !== '') ? Math.round(val * rate) : '';
+    updating = false;
+  });
+
+  $('conv-clear').addEventListener('click', () => {
+    inPesos.value = ''; inUsd.value = '';
+  });
+})();
 </script>
 </body>
 </html>
