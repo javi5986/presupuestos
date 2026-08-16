@@ -39,26 +39,6 @@ td.neg{color:var(--danger)!important;font-weight:700}
 .brand h1{font-size:18px;font-weight:800;margin:0;letter-spacing:-.2px}
 .cat-status{font-size:12px;color:var(--muted);margin:2px 0 0;min-height:16px}
 
-/* ─── Converter bar ──────────────────────────────────────────────────────── */
-.conv-bar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:14px 18px;margin-bottom:18px}
-.conv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.conv-head-title{font-size:13px;font-weight:700;color:var(--teal-d)}
-.conv-tc{font-size:11px;font-weight:600;color:var(--teal-d);background:var(--teal-l);
-  padding:3px 10px;border-radius:20px}
-.conv-inner{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
-.conv-group{display:flex;flex-direction:column;gap:5px;flex:1 1 130px;min-width:100px}
-.conv-group label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.conv-input{border:1.5px solid var(--line);border-radius:8px;padding:9px 12px;font-size:17px;
-  font-weight:700;color:var(--ink);background:var(--bg);width:100%;outline:none;
-  transition:border-color .15s,box-shadow .15s}
-.conv-input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.12);background:#fff}
-.conv-sep{font-size:20px;font-weight:700;color:var(--teal);flex-shrink:0;align-self:flex-end;padding-bottom:9px}
-.conv-clear{border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
-  font-size:12px;font-weight:600;padding:9px 14px;border-radius:8px;flex-shrink:0;
-  align-self:flex-end;white-space:nowrap;transition:.15s}
-.conv-clear:hover{color:var(--danger);border-color:var(--danger);background:#fee2e2}
-@media(max-width:480px){.conv-sep{display:none}}
 
 /* â”€â”€â”€ Dollar chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .dollar-chip{display:flex;align-items:center;gap:12px;background:var(--card);
@@ -202,23 +182,27 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     </div>
   </header>
 
-  <!-- ─── Converter bar ──────────────────────────────────────────────────── -->
-  <div class=”conv-bar”>
-    <div class=”conv-head”>
-      <span class=”conv-head-title”>💱 Conversor rápido</span>
-      <span class=”conv-tc” id=”conv-tc”>TC: —</span>
+  <!-- ─── Conversor ───────────────────────────────────────────────────────── -->
+  <div class=”card” style=”margin-bottom:18px”>
+    <div class=”card-head”>
+      <h2>Conversor</h2>
+      <span class=”cat-status” id=”conv-tc”></span>
     </div>
-    <div class=”conv-inner”>
-      <div class=”conv-group”>
-        <label for=”conv-pesos”>$ Pesos argentinos</label>
-        <input class=”conv-input” id=”conv-pesos” type=”number” min=”0” step=”1” placeholder=”0” autocomplete=”off” inputmode=”numeric”>
+    <div class=”card-body”>
+      <div style=”display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap”>
+        <div class=”field” style=”flex:1 1 140px;margin:0”>
+          <label>$ Pesos</label>
+          <input class=”input” id=”conv-pesos” type=”number” placeholder=”0”
+            oninput=”convConvert('pesos')” autocomplete=”off” inputmode=”numeric”>
+        </div>
+        <span style=”font-size:20px;color:var(--teal);padding-bottom:9px;flex-shrink:0”>⇄</span>
+        <div class=”field” style=”flex:1 1 140px;margin:0”>
+          <label>USD</label>
+          <input class=”input” id=”conv-usd” type=”number” placeholder=”0.00”
+            oninput=”convConvert('usd')” autocomplete=”off” inputmode=”decimal”>
+        </div>
+        <button class=”btn btn-ghost” onclick=”convClear()” style=”align-self:flex-end;flex-shrink:0”>✕ Limpiar</button>
       </div>
-      <span class=”conv-sep”>⇄</span>
-      <div class=”conv-group”>
-        <label for=”conv-usd”>USD dólares</label>
-        <input class=”conv-input” id=”conv-usd” type=”number” min=”0” step=”0.01” placeholder=”0.00” autocomplete=”off” inputmode=”decimal”>
-      </div>
-      <button class=”conv-clear” id=”conv-clear”>✕ Limpiar</button>
     </div>
   </div>
 
@@ -1586,26 +1570,21 @@ document.getElementById('canje-q-date').textContent =
 fetchCanje(); // carga automática al iniciar
 
 // ─── Conversor de moneda ─────────────────────────────────────────────────────
-function convGetRate() { return Number($('rate').value) || 0; }
-function convUpdateTc() {
-  const r = convGetRate();
-  $('conv-tc').textContent = r > 0 ? 'TC: ' + pesos(r) : 'TC: —';
+function convConvert(from) {
+  var r = (rate > 0) ? rate : (Number($('rate').value) || 0);
+  $('conv-tc').textContent = r > 0 ? 'TC: ' + pesos(r) : '';
+  if (!r) return;
+  if (from === 'pesos') {
+    var v = parseFloat($('conv-pesos').value);
+    $('conv-usd').value = isNaN(v) ? '' : (v / r).toFixed(2);
+  } else {
+    var v = parseFloat($('conv-usd').value);
+    $('conv-pesos').value = isNaN(v) ? '' : Math.round(v * r);
+  }
 }
-$('conv-pesos').addEventListener('input', function() {
-  const r = convGetRate(); convUpdateTc();
-  const v = parseFloat(this.value);
-  $('conv-usd').value = (!isNaN(v) && r > 0) ? (v / r).toFixed(2) : '';
-});
-$('conv-usd').addEventListener('input', function() {
-  const r = convGetRate(); convUpdateTc();
-  const v = parseFloat(this.value);
-  $('conv-pesos').value = (!isNaN(v) && r > 0) ? Math.round(v * r) : '';
-});
-$('conv-clear').addEventListener('click', function() {
-  $('conv-pesos').value = ''; $('conv-usd').value = ''; convUpdateTc();
-});
-$('rate').addEventListener('input', convUpdateTc);
-convUpdateTc();
+function convClear() {
+  $('conv-pesos').value = ''; $('conv-usd').value = '';
+}
 </script>
 </body>
 </html>
