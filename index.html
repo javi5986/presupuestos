@@ -188,25 +188,13 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
       <h2>Conversor</h2>
       <span class=”cat-status” id=”conv-tc”></span>
     </div>
-    <div class=”card-body”>
-      <div style=”display:flex;align-items:flex-end;gap:10px”>
-        <div style=”flex:1;min-width:0”>
-          <div class=”field” style=”margin:0”>
-            <label>$ Pesos</label>
-            <input class=”input” id=”conv-pesos” type=”number” placeholder=”0”
-              oninput=”convConvert('pesos')” autocomplete=”off” inputmode=”numeric”>
-          </div>
-        </div>
-        <span style=”color:var(--teal);font-size:20px;padding-bottom:8px;flex-shrink:0”>⇄</span>
-        <div style=”flex:1;min-width:0”>
-          <div class=”field” style=”margin:0”>
-            <label>USD</label>
-            <input class=”input” id=”conv-usd” type=”number” placeholder=”0.00”
-              oninput=”convConvert('usd')” autocomplete=”off” inputmode=”decimal”>
-          </div>
-        </div>
-        <button class=”btn btn-ghost” onclick=”convClear()” style=”flex-shrink:0;align-self:flex-end”>✕</button>
-      </div>
+    <div class=”card-body” style=”display:flex;align-items:center;gap:10px”>
+      <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>$ Pesos</span>
+      <input class=”input” id=”conv-pesos” type=”number” placeholder=”0” oninput=”convConvert('pesos')” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”numeric”>
+      <span style=”color:var(--teal);font-size:18px;flex-shrink:0”>⇄</span>
+      <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>USD</span>
+      <input class=”input” id=”conv-usd” type=”number” placeholder=”0” oninput=”convConvert('usd')” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”decimal”>
+      <button class=”btn btn-ghost” onclick=”convClear()” style=”flex-shrink:0”>✕</button>
     </div>
   </div>
 
@@ -1576,15 +1564,18 @@ fetchCanje(); // carga automática al iniciar
 // ─── Conversor de moneda ─────────────────────────────────────────────────────
 window.convConvert = function(from) {
   var r = rate > 0 ? rate : (Number(document.getElementById('rate').value) || 0);
-  var tcEl = document.getElementById('conv-tc');
-  if (tcEl) tcEl.textContent = r > 0 ? 'TC: ' + pesos(r) : '';
+  document.getElementById('conv-tc').textContent = r > 0 ? 'TC: ' + pesos(r) : '';
   if (!r) return;
+  var peEl = document.getElementById('conv-pesos');
+  var udEl = document.getElementById('conv-usd');
   if (from === 'pesos') {
-    var v = parseFloat(document.getElementById('conv-pesos').value);
-    document.getElementById('conv-usd').value = isNaN(v) ? '' : (v / r).toFixed(2);
+    var v = parseFloat(peEl.value);
+    if (isNaN(v)) { udEl.value = ''; return; }
+    var res = v / r;
+    udEl.value = res >= 1 ? res.toFixed(2) : res.toFixed(4);
   } else {
-    var v = parseFloat(document.getElementById('conv-usd').value);
-    document.getElementById('conv-pesos').value = isNaN(v) ? '' : Math.round(v * r);
+    var v = parseFloat(udEl.value);
+    peEl.value = isNaN(v) ? '' : Math.round(v * r);
   }
 };
 window.convClear = function() {
