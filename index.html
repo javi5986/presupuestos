@@ -190,10 +190,10 @@ table.qtable tfoot td.total-val{text-align:right;font-size:16px;color:var(--teal
     </div>
     <div class=”card-body” style=”display:flex;align-items:center;gap:10px”>
       <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>$ Pesos</span>
-      <input class=”input” id=”conv-pesos” type=”number” min=”0” step=”1” placeholder=”0” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”numeric”>
+      <input class=”input” id=”conv-pesos” type=”text” placeholder=”0” style=”flex:1;min-width:0;width:auto;margin:0” autocomplete=”off” inputmode=”numeric”>
       <span style=”color:var(--teal);font-size:18px;flex-shrink:0”>⇄</span>
       <span style=”font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap”>USD</span>
-      <input class=”input” id=”conv-usd” type=”number” min=”0” step=”0.01” placeholder=”0.00” style=”flex:1;min-width:0;margin:0” autocomplete=”off” inputmode=”decimal”>
+      <input class=”input” id=”conv-usd” type=”text” placeholder=”0.00” style=”flex:1;min-width:0;width:auto;margin:0” autocomplete=”off” inputmode=”decimal”>
       <button class=”btn btn-ghost” id=”conv-clear-btn” style=”flex-shrink:0”>✕</button>
     </div>
   </div>
@@ -1562,34 +1562,34 @@ document.getElementById('canje-q-date').textContent =
 fetchCanje(); // carga automática al iniciar
 
 // ─── Conversor de moneda ─────────────────────────────────────────────────────
-(function() {
-  var peEl = document.getElementById('conv-pesos');
-  var udEl = document.getElementById('conv-usd');
-  var tcEl = document.getElementById('conv-tc');
-  var clEl = document.getElementById('conv-clear-btn');
-
-  function getR() { return rate > 0 ? rate : (Number(document.getElementById('rate').value) || 0); }
-  function showTc(r) { if (tcEl) tcEl.textContent = r > 0 ? 'TC: ' + pesos(r) : ''; }
-
-  peEl.addEventListener('input', function() {
-    var r = getR(); showTc(r);
-    var v = parseFloat(this.value);
-    udEl.value = (!isNaN(v) && r > 0) ? (v / r).toFixed(2) : '';
-  });
-
-  udEl.addEventListener('input', function() {
-    var r = getR(); showTc(r);
-    var v = parseFloat(this.value);
-    peEl.value = (!isNaN(v) && r > 0) ? Math.round(v * r) : '';
-  });
-
-  clEl.addEventListener('click', function() { peEl.value = ''; udEl.value = ''; });
-
-  // Actualizar TC cuando cambia el dólar manualmente
-  document.getElementById('rate').addEventListener('input', function() {
-    showTc(Number(this.value) || 0);
-  });
-})();
+// Usa event delegation en document para evitar problemas con null en iOS
+// y porque type="text" dispara input en cada tecla (type="number" no en iOS)
+document.addEventListener('input', function(e) {
+  var id = e.target ? e.target.id : '';
+  if (id !== 'conv-pesos' && id !== 'conv-usd') return;
+  var r = rate > 0 ? rate : (Number($('rate').value) || 0);
+  var tc = $('conv-tc');
+  if (tc) tc.textContent = r > 0 ? 'TC: ' + pesos(r) : '';
+  if (!r) return;
+  var raw = e.target.value.replace(/[^0-9.]/g, '');
+  var v = parseFloat(raw);
+  if (isNaN(v) || v < 0) {
+    if (id === 'conv-pesos') $('conv-usd').value = '';
+    else $('conv-pesos').value = '';
+    return;
+  }
+  if (id === 'conv-pesos') {
+    $('conv-usd').value = (v / r).toFixed(2);
+  } else {
+    $('conv-pesos').value = Math.round(v * r);
+  }
+});
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'conv-clear-btn') {
+    $('conv-pesos').value = '';
+    $('conv-usd').value = '';
+  }
+});
 </script>
 </body>
 </html>
